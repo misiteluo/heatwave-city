@@ -1,138 +1,95 @@
-// HEATWAVE CITY — procedural canvas textures.
-// All art is generated at boot: building facades with lit windows, asphalt with lane
-// markings, sidewalks, sand, water and shop signs. No image files, no network.
+// HEATWAVE CITY — procedural Canvas textures: building facades, road asphalt,
+// sand and water. No image files anywhere; everything is drawn at boot.
 
-function canvasOf(w, h) {
-  const c = document.createElement('canvas');
-  c.width = w; c.height = h;
-  return [c, c.getContext('2d')];
+import { THREE, rnd, ri } from './config.js';
+
+function canvas(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
+function tex(c, rx = 1, ry = 1) {
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rx, ry);
+  t.anisotropy = 4;
+  return t;
 }
 
-function toTexture(canvas, repeatX = 1, repeatY = 1) {
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(repeatX, repeatY);
-  tex.anisotropy = 4;
-  return tex;
-}
+// Warm coastal palettes for the facades.
+const PALETTES = [
+  { wall: '#e8b04b', trim: '#fff3d6', win: '#2b4a5e' },
+  { wall: '#e2703a', trim: '#ffe8d1', win: '#274b63' },
+  { wall: '#f2e3c9', trim: '#ffffff', win: '#33566b' },
+  { wall: '#d95f4b', trim: '#ffd9c4', win: '#2b4a5e' },
+  { wall: '#7fb5b0', trim: '#eafffb', win: '#274b63' },
+  { wall: '#e9e4da', trim: '#ffffff', win: '#3a5a70' },
+  { wall: '#c98bb9', trim: '#ffe9f7', win: '#33566b' },
+  { wall: '#f0c75e', trim: '#fff6da', win: '#2b4a5e' },
+];
 
-// A sun-baked facade: warm plaster, rows of windows (some lit), a shopfront band at the base.
-export function makeFacadeTexture(rng, base, accent) {
-  const [c, g] = canvasOf(256, 512);
-  g.fillStyle = base; g.fillRect(0, 0, 256, 512);
-  // subtle plaster noise
-  for (let i = 0; i < 900; i++) {
-    g.fillStyle = `rgba(0,0,0,${0.02 + rng() * 0.05})`;
-    g.fillRect(rng() * 256, rng() * 512, 2 + rng() * 5, 2 + rng() * 5);
+export function buildingTexture(floors, litRatio = 0.25) {
+  const p = PALETTES[ri(0, PALETTES.length - 1)];
+  const c = canvas(128, 256), g = c.getContext('2d');
+  g.fillStyle = p.wall; g.fillRect(0, 0, 128, 256);
+  // subtle vertical shading
+  const grad = g.createLinearGradient(0, 0, 128, 0);
+  grad.addColorStop(0, 'rgba(0,0,0,0.12)'); grad.addColorStop(0.5, 'rgba(255,255,255,0.05)'); grad.addColorStop(1, 'rgba(0,0,0,0.16)');
+  g.fillStyle = grad; g.fillRect(0, 0, 128, 256);
+  g.fillStyle = p.trim; g.fillRect(0, 0, 128, 8); g.fillRect(0, 248, 128, 8);
+  const cols = 4, rowsN = Math.max(3, floors);
+  const cw = 128 / cols, ch = 248 / rowsN;
+  for (let y = 0; y < rowsN; y++) for (let x = 0; x < cols; x++) {
+    const lit = rnd() < litRatio;
+    g.fillStyle = lit ? '#ffd873' : p.win;
+    g.fillRect(x * cw + 6, y * ch + 8, cw - 12, ch - 14);
+    g.fillStyle = 'rgba(255,255,255,0.25)';
+    g.fillRect(x * cw + 6, y * ch + 8, cw - 12, 3);
   }
-  // cornice bands
-  g.fillStyle = accent;
-  g.fillRect(0, 0, 256, 10);
-  g.fillRect(0, 386, 256, 8);
-  // windows: 5 cols x 9 rows
-  for (let row = 0; row < 9; row++) {
-    for (let col = 0; col < 5; col++) {
-      const x = 18 + col * 46, y = 26 + row * 40;
-      const lit = rng() < 0.34;
-      g.fillStyle = 'rgba(40,30,26,0.85)';
-      g.fillRect(x - 2, y - 2, 30, 32);
-      const grad = g.createLinearGradient(x, y, x, y + 28);
-      if (lit) { grad.addColorStop(0, '#ffe9a8'); grad.addColorStop(1, '#ffb45e'); }
-      else { grad.addColorStop(0, '#7fa3b8'); grad.addColorStop(1, '#46657a'); }
-      g.fillStyle = grad;
-      g.fillRect(x, y, 26, 28);
-      g.fillStyle = 'rgba(255,255,255,0.25)';
-      g.fillRect(x, y, 26, 4);
-    }
-  }
-  // shopfront: awning + glass
-  g.fillStyle = accent; g.fillRect(0, 398, 256, 26);
-  g.fillStyle = 'rgba(255,255,255,0.85)';
-  g.font = 'bold 17px Arial'; g.textAlign = 'center';
-  g.fillText('· · ·', 128, 417);
-  const shop = g.createLinearGradient(0, 424, 0, 512);
-  shop.addColorStop(0, '#5d7d8c'); shop.addColorStop(1, '#2c424e');
-  g.fillStyle = shop; g.fillRect(8, 428, 240, 84);
-  g.fillStyle = 'rgba(255,255,255,0.35)';
-  g.fillRect(20, 436, 46, 68); g.fillRect(110, 436, 46, 68); g.fillRect(196, 436, 40, 68);
-  return toTexture(c);
+  return tex(c);
 }
 
-// Asphalt with a dashed centre line — used on road strips, rotated per direction.
-export function makeRoadTexture() {
-  const [c, g] = canvasOf(128, 128);
-  g.fillStyle = '#3a3d44'; g.fillRect(0, 0, 128, 128);
-  for (let i = 0; i < 500; i++) {
-    g.fillStyle = `rgba(255,255,255,${rng01() * 0.05})`;
-    g.fillRect(rng01() * 128, rng01() * 128, 2, 2);
-  }
-  g.fillStyle = '#e8e4da';
-  g.fillRect(0, 0, 4, 128); g.fillRect(124, 0, 4, 128); // edge lines
-  g.fillStyle = '#ffd23e';
-  g.fillRect(61, 8, 6, 44); g.fillRect(61, 76, 6, 44); // centre dashes
-  return toTexture(c);
+export function roofTexture() {
+  const c = canvas(64, 64), g = c.getContext('2d');
+  g.fillStyle = '#8a6f5c'; g.fillRect(0, 0, 64, 64);
+  g.fillStyle = 'rgba(0,0,0,0.15)';
+  for (let i = 0; i < 40; i++) g.fillRect(rnd() * 64, rnd() * 64, 3, 3);
+  g.strokeStyle = 'rgba(0,0,0,0.25)'; g.strokeRect(2, 2, 60, 60);
+  return tex(c);
 }
 
-let seed = 7;
-function rng01() { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; }
-
-export function makeSidewalkTexture() {
-  const [c, g] = canvasOf(128, 128);
-  g.fillStyle = '#a89a89'; g.fillRect(0, 0, 128, 128);
-  g.strokeStyle = 'rgba(70,60,50,0.5)'; g.lineWidth = 2;
-  g.strokeRect(1, 1, 126, 126);
-  g.beginPath(); g.moveTo(64, 0); g.lineTo(64, 128); g.stroke();
-  for (let i = 0; i < 260; i++) {
-    g.fillStyle = `rgba(60,50,40,${rng01() * 0.08})`;
-    g.fillRect(rng01() * 128, rng01() * 128, 3, 3);
-  }
-  return toTexture(c);
+export function roadTexture() {
+  const c = canvas(128, 128), g = c.getContext('2d');
+  g.fillStyle = '#3c4148'; g.fillRect(0, 0, 128, 128);
+  for (let i = 0; i < 500; i++) { g.fillStyle = `rgba(255,255,255,${rnd() * 0.05})`; g.fillRect(rnd() * 128, rnd() * 128, 2, 2); }
+  // centre dashes (texture runs along the road)
+  g.fillStyle = '#e8c85a';
+  g.fillRect(61, 6, 6, 44); g.fillRect(61, 78, 6, 44);
+  return tex(c, 1, 10);
 }
 
-export function makeSandTexture() {
-  const [c, g] = canvasOf(128, 128);
-  g.fillStyle = '#ecd3a0'; g.fillRect(0, 0, 128, 128);
-  for (let i = 0; i < 800; i++) {
-    g.fillStyle = rng01() < 0.5 ? 'rgba(190,150,90,0.15)' : 'rgba(255,246,220,0.18)';
-    g.fillRect(rng01() * 128, rng01() * 128, 2, 2);
-  }
-  return toTexture(c, 24, 4);
+export function sidewalkTexture() {
+  const c = canvas(64, 64), g = c.getContext('2d');
+  g.fillStyle = '#cfc4ae'; g.fillRect(0, 0, 64, 64);
+  g.strokeStyle = 'rgba(0,0,0,0.18)'; g.lineWidth = 2;
+  g.strokeRect(1, 1, 62, 62); g.beginPath(); g.moveTo(32, 0); g.lineTo(32, 64); g.stroke();
+  return tex(c, 6, 6);
 }
 
-export function makeWaterTexture() {
-  const [c, g] = canvasOf(128, 128);
-  const grad = g.createLinearGradient(0, 0, 0, 128);
-  grad.addColorStop(0, '#3d94bd'); grad.addColorStop(1, '#256a92');
-  g.fillStyle = grad; g.fillRect(0, 0, 128, 128);
-  g.strokeStyle = 'rgba(255,255,255,0.28)'; g.lineWidth = 2;
-  for (let i = 0; i < 9; i++) {
-    const y = 8 + i * 14 + rng01() * 5;
-    g.beginPath();
-    g.moveTo(rng01() * 40, y);
-    g.lineTo(50 + rng01() * 70, y);
-    g.stroke();
-  }
-  return toTexture(c, 30, 10);
+export function sandTexture() {
+  const c = canvas(128, 128), g = c.getContext('2d');
+  g.fillStyle = '#eed9a0'; g.fillRect(0, 0, 128, 128);
+  for (let i = 0; i < 700; i++) { g.fillStyle = `rgba(160,120,50,${rnd() * 0.16})`; g.fillRect(rnd() * 128, rnd() * 128, 2, 2); }
+  return tex(c, 24, 6);
 }
 
-// A bold sign board ("BANK", "GARAGE", "SAFEHOUSE"...) rendered as a texture.
-export function makeSignTexture(text, bg, fg) {
-  const [c, g] = canvasOf(512, 128);
-  g.fillStyle = bg; g.fillRect(0, 0, 512, 128);
-  g.strokeStyle = fg; g.lineWidth = 6; g.strokeRect(8, 8, 496, 112);
-  g.fillStyle = fg;
-  g.font = '900 62px Arial'; g.textAlign = 'center'; g.textBaseline = 'middle';
-  g.fillText(text, 256, 68);
-  const tex = new THREE.CanvasTexture(c);
-  tex.anisotropy = 4;
-  return tex;
+export function grassTexture() {
+  const c = canvas(128, 128), g = c.getContext('2d');
+  g.fillStyle = '#79a84e'; g.fillRect(0, 0, 128, 128);
+  for (let i = 0; i < 700; i++) { g.fillStyle = `rgba(40,90,30,${rnd() * 0.25})`; g.fillRect(rnd() * 128, rnd() * 128, 2, 3); }
+  return tex(c, 30, 30);
 }
 
-// Soft round sprite used for smoke, muzzle flash glow and marker glows.
-export function makeGlowTexture(inner = 'rgba(255,255,255,1)', outer = 'rgba(255,255,255,0)') {
-  const [c, g] = canvasOf(64, 64);
-  const grad = g.createRadialGradient(32, 32, 2, 32, 32, 31);
-  grad.addColorStop(0, inner); grad.addColorStop(1, outer);
+// Soft round sprite used for the mission beacon glow and particles.
+export function glowTexture() {
+  const c = canvas(64, 64), g = c.getContext('2d');
+  const grad = g.createRadialGradient(32, 32, 2, 32, 32, 32);
+  grad.addColorStop(0, 'rgba(255,255,255,1)'); grad.addColorStop(1, 'rgba(255,255,255,0)');
   g.fillStyle = grad; g.fillRect(0, 0, 64, 64);
-  return new THREE.CanvasTexture(c);
+  return tex(c);
 }

@@ -1,202 +1,206 @@
-// HEATWAVE CITY — Mara Voss's five-job story line and the runner that tracks it.
-// Steps are data: goto / steal a marked car / deliver it / clear a fight /
-// hold a circle / escape the heat. The runner talks to the game through hooks
-// so it never reaches into rendering or physics directly.
+// HEATWAVE CITY — the story: five jobs for fixer Mara Voss, played by Jett.
+// Each mission is a list of stages (goto / steal / deliver / fight / hold /
+// escape) with a gold beacon in the world, a gold dot on the minimap and an
+// objective line on the HUD. Completing one unlocks the next and banks cash.
+
+import { THREE, clamp, dist2d, rr } from './config.js';
+import { LANDMARKS } from './city.js';
+import { createCar } from './vehicles.js';
+import { spawnEnemy } from './combat.js';
+import { addCrime } from './police.js';
+import { glowTexture } from './textures.js';
 
 export const MISSIONS = [
-  {
-    id: 'first-wheels',
-    title: 'First Wheels',
-    reward: 400,
-    intro: 'Jett. A gold coupe sits outside the Meridian Hotel, and its owner owes me. Take it, bring it to my garage. Try not to scratch it.',
-    steps: [
-      { type: 'goto', x: -238, z: 32, r: 12, text: 'Meet Mara at Voss Garage', dialog: ['Mara Voss', 'You showed up. Good. Wheels first, questions later.'] },
-      { type: 'steal', x: 155.6, z: -118, heading: 0, color: 0xf5b041, text: 'Steal the gold coupe by the Meridian Hotel', dialog: ['Mara Voss', 'Gold coupe, east side, plates ending 88. The doorman looks the other way for cash — you are the cash.'] },
-      { type: 'deliver', x: -238, z: 32, r: 13, text: 'Deliver the coupe to Voss Garage' },
-    ],
-    outro: 'Clean work. The bay is full of people who owe me, Jett. Stick around.',
-  },
-  {
-    id: 'package-run',
-    title: 'Package Run',
-    reward: 650,
-    intro: 'A package came in at the docks. Pick it up and take it across town to my buyers. The port guards shoot first, so expect company.',
-    steps: [
-      { type: 'goto', x: -225, z: 316, r: 12, text: 'Pick up the package at the docks', dialog: ['Dock Foreman', 'You Voss\'s new dog? Package is yours. And hey — the guards saw your face. Run.'], crime: 'pickup' },
-      { type: 'goto', x: 200, z: -238, r: 13, text: 'Drop the package at the buyers, north-east', dialog: ['Buyer', 'On time and still breathing. Mara pays well for both.'] },
-    ],
-    outro: 'Word travels. The whole bay knows your name now — the cops included.',
-  },
-  {
-    id: 'beach-debt',
-    title: 'Beach Debt',
-    reward: 900,
-    intro: 'The Solano brothers owe me three months of protection money and think the beach is a fortress. Go collect — and take their car as interest.',
-    steps: [
-      { type: 'goto', x: 66, z: 314, r: 13, text: 'Confront the Solano brothers at the beach' },
-      { type: 'fight', x: 66, z: 314, count: 3, text: 'Put the Solano crew down', dialog: ['Rico Solano', 'Wrong beach, friend. Nobody collects from us.'] },
-      { type: 'steal', x: 88, z: 300, heading: Math.PI / 2, color: 0x22252b, text: 'Take the Solanos\' black sedan as interest' },
-      { type: 'deliver', x: 238, z: -208, r: 13, text: 'Bring the sedan to the safehouse' },
-    ],
-    outro: 'The brothers will walk funny for a month. You are earning your cut, Jett.',
-  },
-  {
-    id: 'hot-pursuit',
-    title: 'Hot Pursuit',
-    reward: 1200,
-    intro: 'Time to grow up. The Bank of Caldera keeps my money in vault two. Trip the alarm, fill a bag, then disappear to the safehouse.',
-    steps: [
-      { type: 'goto', x: 2, z: -224, r: 10, text: 'Go to the Bank of Caldera', dialog: ['Jett', 'Vault two. In and out. What could go wrong.'] },
-      { type: 'hold', x: 2, z: -224, r: 13, seconds: 12, text: 'Fill the bag — hold the bank entrance', startCrime: 4, dialog: ['Alarm', 'SILENT ALARM TRIPPED — CBPD units responding.'] },
-      { type: 'escape', x: 238, z: -208, r: 14, text: 'Lose the heat and reach the safehouse' },
-    ],
-    outro: 'Half the force chased you and you still made rent. I am impressed, and I do not impress.',
-  },
-  {
-    id: 'big-score',
-    title: 'The Big Score',
-    reward: 2000,
-    intro: 'One last job, the big one. The bank again — but the Solanos want their revenge and the vault holds a fortune. Hold the door, then run it to the docks.',
-    steps: [
-      { type: 'goto', x: 2, z: -224, r: 10, text: 'Return to the Bank of Caldera' },
-      { type: 'hold', x: 2, z: -224, r: 15, seconds: 40, fight: 3, fightWave2: 3, text: 'Hold the bank doors against the Solano crew', startCrime: 3, dialog: ['Rico Solano', 'There he is! Nobody robs our bank run. Take him down!'] },
-      { type: 'goto', x: -225, z: 316, r: 14, text: 'Escape to the docks with the score', dialog: ['Mara Voss', 'Boat is waiting, Jett. Bring my money home.'] },
-    ],
-    outro: 'That is the whole bay in your pocket. Legend status, Jett. The city is yours now — go enjoy it.',
-  },
+  { title: 'First Wheels', reward: 300, intro: 'Mara Voss: "Jett, lift the gold coupe by the Palms Hotel and bring it to my garage. Quietly."' },
+  { title: 'Hot Package', reward: 450, intro: 'Mara Voss: "Pick up a package at the dock warehouse. Drop it at the Palms Hotel. Expect company."' },
+  { title: 'Beach Debt', reward: 600, intro: 'Mara Voss: "A crew on Coral Beach owes me. Collect — then bring me their car."' },
+  { title: 'Heat Run', reward: 800, intro: 'Mara Voss: "Grab the cash drop at Heatwave Bank and lose the heat. Reach the safehouse."' },
+  { title: 'The Big Score', reward: 1500, intro: 'Mara Voss: "One last job. Hold the bank plaza while we crack the vault, then run for the marina."' },
 ];
 
-export class MissionRunner {
-  constructor(hooks, landmarks) {
-    this.hooks = hooks;
-    this.landmarks = landmarks;
-    this.index = 0;         // current mission
-    this.stepIndex = 0;
-    this.active = false;    // a mission is in progress
-    this.done = false;      // whole story finished
-    this.stepCar = null;    // the car a steal/deliver chain is about
-    this.holdLeft = 0;
-    this.spawnedFight = false;
-    this.wave2Spawned = false;
+export function initMissions(G) {
+  G.mission = { index: -1, stage: 0, active: false, markedCar: null, holdT: 0, waveT: 0, delay: 0, fightSet: [] };
+  G.objective = null;
+  // Gold beacon: a translucent pillar + ground ring + glow sprite.
+  const geo = new THREE.CylinderGeometry(1.5, 1.5, 70, 12, 1, true);
+  const m = new THREE.MeshBasicMaterial({ color: 0xffc93c, transparent: true, opacity: 0.3, side: THREE.DoubleSide, depthWrite: false });
+  G.beacon = new THREE.Mesh(geo, m); G.beacon.position.y = 35; G.beacon.visible = false; G.scene.add(G.beacon);
+  const ring = new THREE.Mesh(new THREE.RingGeometry(2.2, 3, 24), new THREE.MeshBasicMaterial({ color: 0xffc93c, transparent: true, opacity: 0.8, side: THREE.DoubleSide }));
+  ring.rotation.x = -Math.PI / 2; ring.position.y = 0.15; G.beaconRing = ring; ring.visible = false; G.scene.add(ring);
+  const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color: 0xffc93c, transparent: true, opacity: 0.75, depthWrite: false }));
+  spr.scale.set(9, 9, 1); spr.position.y = 3; G.beaconGlow = spr; spr.visible = false; G.scene.add(spr);
+}
+
+function setBeacon(G, x, z) {
+  for (const o of [G.beacon, G.beaconRing, G.beaconGlow]) { o.visible = true; o.position.x = x; o.position.z = z; }
+  G.beacon.position.y = 35; G.beaconRing.position.y = 0.15; G.beaconGlow.position.y = 3;
+}
+function hideBeacon(G) { G.beacon.visible = G.beaconRing.visible = G.beaconGlow.visible = false; }
+
+function markCar(G, car) {
+  car.marked = true;
+  const ring = new THREE.Mesh(new THREE.RingGeometry(2.4, 3.1, 24), new THREE.MeshBasicMaterial({ color: 0xffc93c, transparent: true, opacity: 0.85, side: THREE.DoubleSide }));
+  ring.rotation.x = -Math.PI / 2; ring.position.y = 0.12;
+  car.mesh.add(ring); car.ring = ring;
+  G.mission.markedCar = car;
+}
+
+function stageDef(G) {
+  const L = LANDMARKS, m = G.mission;
+  const table = [
+    [ // M1
+      { type: 'steal', text: 'Steal the gold coupe', at: { x: 140, z: 20 } },
+      { type: 'deliver', text: "Deliver the coupe to Mara's garage", at: L.garage, needMarked: true },
+    ],
+    [ // M2
+      { type: 'goto', text: 'Pick up the package at the warehouse', at: L.warehouse, r: 11 },
+      { type: 'deliver', text: 'Drop the package at the Palms Hotel', at: L.hotel },
+    ],
+    [ // M3
+      { type: 'fight', text: 'Collect the debt on Coral Beach', at: L.beach, count: 3 },
+      { type: 'deliver', text: "Take the crew's car to Mara's garage", at: L.garage, needMarked: true },
+    ],
+    [ // M4
+      { type: 'goto', text: 'Grab the cash drop at Heatwave Bank', at: L.bank, r: 11 },
+      { type: 'escape', text: 'Lose the heat — reach the safehouse', at: L.safehouse, r: 11 },
+    ],
+    [ // M5
+      { type: 'goto', text: 'Get to Heatwave Bank', at: L.bank, r: 12 },
+      { type: 'hold', text: 'Hold the bank plaza', at: L.bank, r: 14, sec: 40 },
+      { type: 'escape', text: 'Run for the marina dock', at: L.dock, r: 12 },
+    ],
+  ];
+  return table[m.index]?.[m.stage] || null;
+}
+
+export function startMission(G, index) {
+  const m = G.mission;
+  m.index = index; m.stage = 0; m.active = true; m.markedCar = null; m.fightSet = [];
+  const def = MISSIONS[index];
+  G.hud.toast(`${def.title} — ${def.intro}`, 6);
+  G.audio.sting();
+  setupStage(G);
+}
+
+function setupStage(G) {
+  const m = G.mission, def = stageDef(G);
+  if (!def) return;
+  m.holdT = 0; m.waveT = 4;
+  if (m.index === 0 && m.stage === 0) {
+    const car = createCar(G.scene, 140, 20, Math.PI / 2, { kind: 'parked', color: 0xffc93c });
+    car.parked = true; G.cars.push(car); G.parkedCars.push(car);
+    markCar(G, car);
   }
-
-  get mission() { return MISSIONS[this.index] || null; }
-  get step() { return this.mission ? this.mission.steps[this.stepIndex] : null; }
-
-  start(index) {
-    this.index = index;
-    this.stepIndex = 0;
-    this.active = true;
-    this.done = false;
-    this.beginStep();
-    this.hooks.dialog('Mara Voss', this.mission.intro);
-    this.hooks.toast(`New job: ${this.mission.title}`);
-  }
-
-  beginStep() {
-    const s = this.step;
-    if (!s) return;
-    this.spawnedFight = false;
-    this.wave2Spawned = false;
-    if (s.type === 'steal') {
-      this.stepCar = this.hooks.spawnMissionCar(s.x, s.z, s.heading || 0, s.color);
+  if (m.index === 2 && m.stage === 0) {
+    m.fightSet = [];
+    for (let i = 0; i < def.count; i++) {
+      const e = spawnEnemy(G, def.at.x + rr(-9, 9), def.at.z + rr(-7, 7));
+      m.fightSet.push(e);
     }
-    if (s.type === 'hold') {
-      this.holdLeft = s.seconds;
-      if (s.startCrime) this.hooks.setWantedAtLeast(s.startCrime);
-      if (s.fight) { this.hooks.spawnFight(s.fight, s.x, s.z); this.spawnedFight = true; }
-    }
-    if (s.type === 'fight') {
-      this.hooks.spawnFight(s.count, s.x, s.z);
-      this.spawnedFight = true;
-    }
-    if (s.crime === 'pickup') { /* applied on arrival, see update */ }
-    if (s.dialog) this.hooks.dialog(s.dialog[0], s.dialog[1]);
+    const car = createCar(G.scene, -38, 283, Math.PI / 2, { kind: 'parked', color: 0x8d0801 });
+    car.parked = true; G.cars.push(car); G.parkedCars.push(car);
+    markCar(G, car);
   }
+  if (m.index === 4 && m.stage === 1) { m.holdT = def.sec; }
+}
 
-  marker() {
-    const s = this.step;
-    if (!s || !this.active) return null;
-    if (s.type === 'steal' && this.stepCar) return { x: this.stepCar.mesh.position.x, z: this.stepCar.mesh.position.z };
-    return { x: s.x, z: s.z };
+function advance(G) {
+  const m = G.mission;
+  m.stage++;
+  if (!stageDef(G)) completeMission(G);
+  else { setupStage(G); G.audio.sting(); }
+}
+
+function completeMission(G) {
+  const m = G.mission, def = MISSIONS[m.index];
+  m.active = false;
+  G.wanted.floor = 0;
+  G.cash += def.reward;
+  G.audio.reward(def.reward);
+  G.hud.toast(`Mission complete — +$${def.reward}`, 4.5);
+  if (m.index === 1 && !G.pistol) {
+    G.pistol = true;
+    G.hud.toast('Mara left you a pistol — press 2 to draw it', 5);
   }
-
-  objectiveText() {
-    const s = this.step;
-    if (!s) return '';
-    if (s.type === 'escape') return `${s.text} — heat must be gone`;
-    if (s.type === 'hold') return `${s.text} (${Math.ceil(this.holdLeft)}s)`;
-    if (s.type === 'fight') return `${s.text} — ${this.hooks.aliveEnemies()} left`;
-    return s.text;
+  G.missionIndex = m.index + 1;
+  if (m.index >= MISSIONS.length - 1) {
+    G.storyDone = true;
+    G.hud.toast('Story complete — Heatwave City is yours. Free roam!', 6);
+  } else {
+    m.delay = 3; // next mission starts shortly
   }
+  hideBeacon(G);
+  G.objective = null;
+  G.saveGame();
+}
 
-  completeMission() {
-    const m = this.mission;
-    this.hooks.addCash(m.reward);
-    this.hooks.toast(`Job done: ${m.title}  +$${m.reward}`);
-    this.hooks.dialog('Mara Voss', m.outro);
-    this.hooks.sfx('reward');
-    this.active = false;
-    this.stepCar = null;
-    this.hooks.clearEnemies();
-    if (this.index + 1 < MISSIONS.length) {
-      this.index += 1;
-      this.stepIndex = 0;
-      this.active = true;
-      this.beginStep();
-      this.hooks.toast(`New job available: ${this.mission.title} — follow the gold marker`);
-    } else {
-      this.done = true;
-      this.hooks.onStoryComplete();
-    }
-    this.hooks.save();
+export function updateMissions(G, dt) {
+  const m = G.mission;
+  if (!m.active) {
+    if (m.delay > 0) { m.delay -= dt; if (m.delay <= 0 && G.missionIndex < MISSIONS.length) startMission(G, G.missionIndex); }
+    return;
   }
+  const def = stageDef(G);
+  if (!def) return;
+  // Objective + beacon follow the stage target (the marked car can move).
+  let tx = def.at.x, tz = def.at.z;
+  if (def.type === 'steal' && m.markedCar) { tx = m.markedCar.x; tz = m.markedCar.z; }
+  if (def.type === 'deliver' && def.needMarked && G.mode === 'car' && G.playerCar === m.markedCar) { tx = def.at.x; tz = def.at.z; }
+  let text = def.text;
+  if (def.type === 'hold') text = `${def.text} — ${Math.ceil(m.holdT)}s`;
+  G.objective = { text, x: tx, z: tz };
+  setBeacon(G, tx, tz);
 
-  advance() {
-    this.stepIndex += 1;
-    if (this.stepIndex >= this.mission.steps.length) this.completeMission();
-    else this.beginStep();
-  }
-
-  // Called every frame by main. ctx: { playerPos, currentCar, wanted }
-  update(dt, ctx) {
-    if (!this.active || !this.step) return;
-    const s = this.step;
-    const p = ctx.playerPos;
-    const d = Math.hypot(p.x - s.x, p.z - s.z);
-    switch (s.type) {
-      case 'goto':
-        if (d < s.r) {
-          if (s.crime === 'pickup') this.hooks.setWantedAtLeast(2);
-          this.advance();
-        }
-        break;
-      case 'steal':
-        if (ctx.currentCar && ctx.currentCar === this.stepCar) this.advance();
-        break;
-      case 'deliver':
-        if (d < s.r && ctx.currentCar === this.stepCar) {
-          // hand the car over: it stays at the drop-off as a normal parked car
-          this.advance();
-        }
-        break;
-      case 'fight':
-        if (this.spawnedFight && this.hooks.aliveEnemies() === 0) this.advance();
-        break;
-      case 'hold': {
-        if (s.fight && s.fightWave2 && !this.wave2Spawned && this.holdLeft < s.seconds / 2) {
-          this.hooks.spawnFight(s.fightWave2, s.x + 16, s.z + 10);
-          this.wave2Spawned = true;
-        }
-        if (d < s.r) {
-          this.holdLeft -= dt;
-          if (this.holdLeft <= 0) this.advance();
-        }
-        break;
+  const d = dist2d(G.playerPos.x, G.playerPos.z, def.at.x, def.at.z);
+  switch (def.type) {
+    case 'goto':
+      if (d < (def.r || 10)) {
+        if (G.mission.index === 1) { addCrime(G, 200, G.playerPos.x, G.playerPos.z); G.hud.toast('Package on board — you have heat!', 3.5); }
+        if (G.mission.index === 3) { G.wanted.floor = 400; addCrime(G, 400, G.playerPos.x, G.playerPos.z); G.hud.toast('Four stars — run!', 3.5); }
+        if (G.mission.index === 4 && G.mission.stage === 0) G.hud.toast('The vault team is in — hold the plaza!', 3.5);
+        advance(G);
       }
-      case 'escape':
-        if (d < s.r && ctx.wanted === 0) this.advance();
-        break;
+      break;
+    case 'steal':
+      break; // completed by the 'stoleMarked' event in enterCar
+    case 'deliver':
+      G.missionPrompt = (d < 11 && def.needMarked && !(G.mode === 'car' && G.playerCar === m.markedCar)) ? 'You need the marked car' : '';
+      if (d < 11 && !G.missionPrompt) advance(G);
+      break;
+    case 'fight':
+      if (m.fightSet.every((e) => e.dead)) { G.hud.toast("Debt collected — now take their car", 3.5); advance(G); }
+      break;
+    case 'hold': {
+      if (d < def.r) {
+        m.holdT -= dt;
+        m.waveT -= dt;
+        if (m.waveT <= 0) {
+          m.waveT = 11;
+          spawnEnemy(G, def.at.x + rr(-26, 26), def.at.z + rr(-26, 26));
+          spawnEnemy(G, def.at.x + rr(-26, 26), def.at.z + rr(-26, 26));
+          G.hud.toast('More of them — hold on!', 2.5);
+        }
+        if (m.holdT <= 0) { addCrime(G, 300, G.playerPos.x, G.playerPos.z); advance(G); }
+      }
+      break;
     }
+    case 'escape':
+      if (d < (def.r || 11)) advance(G);
+      break;
   }
+}
+
+// Events coming from player/combat via G.events.
+export function handleMissionEvent(G, ev) {
+  const m = G.mission;
+  if (!m.active) return;
+  const def = stageDef(G);
+  if (ev.type === 'stoleMarked' && def?.type === 'steal') advance(G);
+  else if (ev.type === 'stoleMarked' && def?.type === 'deliver' && def.needMarked) { /* just got in the car; deliver check runs per-frame */ }
+}
+
+// Display-only objective for staged screenshots.
+export function setShotObjective(G, text, x, z) {
+  G.objective = { text, x, z };
+  setBeacon(G, x, z);
 }

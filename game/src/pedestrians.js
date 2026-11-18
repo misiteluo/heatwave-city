@@ -1,153 +1,124 @@
-// HEATWAVE CITY — pedestrians: low-poly people who stroll the sidewalks block by block,
-// and scatter when gunfire, sirens or a reckless driver scare them.
+// HEATWAVE CITY — box-built humanoids (shared by the player, pedestrians and
+// gang members) and the pedestrian crowd: sidewalk loop walkers who flee
+// from gunfire and reckless driving, and can be knocked down.
 
-import { CITY, clamp, dist2d } from './config.js';
+import { THREE, PITCH, BLOCK_HALF, GRID, clamp, rr, rnd, pick, dist2d, yawToward, angleLerp } from './config.js';
 
-const SKIN = [0xf2c79b, 0xc68863, 0x8a5a3b, 0x6e4530];
-const SHIRT = [0xe74c3c, 0x3498db, 0xf1c40f, 0x2ecc71, 0xe67e22, 0x9b59b6, 0xecf0f1, 0x1abc9c, 0xfd79a8];
-const PANTS = [0x2c3e50, 0x5d4037, 0x546e7a, 0x795548, 0x37474f];
+const SKIN = [0xf2c09a, 0xc68863, 0x8a5a3b, 0xffdbac];
+const SHIRTS = [0xef476f, 0x118ab2, 0x06d6a0, 0xffd166, 0xf78c6b, 0x9b5de5, 0xffffff, 0x2a9d8f];
+const PANTS = [0x2b2d42, 0x4a4e69, 0x6c5849, 0x1d3557, 0x555b6e];
 
-// Builds one articulated low-poly person; parts are exposed for the walk-cycle swing.
-export function buildPersonMesh(rng, forceColors = null) {
+export function buildHumanoid(shirt = null, pants = null, skin = null) {
   const g = new THREE.Group();
-  const skin = new THREE.MeshLambertMaterial({ color: (forceColors && forceColors.skin) || SKIN[Math.floor(rng() * SKIN.length)] });
-  const shirt = new THREE.MeshLambertMaterial({ color: (forceColors && forceColors.shirt) || SHIRT[Math.floor(rng() * SHIRT.length)] });
-  const pants = new THREE.MeshLambertMaterial({ color: (forceColors && forceColors.pants) || PANTS[Math.floor(rng() * PANTS.length)] });
+  const sMat = new THREE.MeshLambertMaterial({ color: skin ?? pick(SKIN) });
+  const tMat = new THREE.MeshLambertMaterial({ color: shirt ?? pick(SHIRTS) });
+  const pMat = new THREE.MeshLambertMaterial({ color: pants ?? pick(PANTS) });
+  const mk = (w, h, d, m, x, y, z) => { const q = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); q.position.set(x, y, z); q.castShadow = true; g.add(q); return q; };
+  const legL = mk(0.17, 0.78, 0.19, pMat, -0.11, 0.39, 0); legL.geometry.translate(0, -0.33, 0); legL.position.y = 0.72;
+  const legR = mk(0.17, 0.78, 0.19, pMat, 0.11, 0.39, 0); legR.geometry.translate(0, -0.33, 0); legR.position.y = 0.72;
+  const torso = mk(0.46, 0.62, 0.24, tMat, 0, 1.03, 0);
+  const armL = mk(0.13, 0.66, 0.15, tMat, -0.31, 0.95, 0); armL.geometry.translate(0, -0.26, 0); armL.position.y = 1.28;
+  const armR = mk(0.13, 0.66, 0.15, tMat, 0.31, 0.95, 0); armR.geometry.translate(0, -0.26, 0); armR.position.y = 1.28;
+  const head = mk(0.26, 0.3, 0.26, sMat, 0, 1.52, 0);
+  const hair = mk(0.28, 0.09, 0.28, new THREE.MeshLambertMaterial({ color: pick([0x2b2118, 0x59422a, 0x111111, 0xb08968]) }), 0, 1.7, 0);
+  return { group: g, legL, legR, armL, armR, torso, head };
+}
 
-  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.62, 0.3), shirt);
-  torso.position.y = 1.12; torso.castShadow = true;
-  g.add(torso);
-  const head = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.34, 0.3), skin);
-  head.position.y = 1.62; head.castShadow = true;
-  g.add(head);
-  function limb(mat, w, len, x, y, z) {
-    const pivot = new THREE.Group();
-    pivot.position.set(x, y, z);
-    const m = new THREE.Mesh(new THREE.BoxGeometry(w, len, w), mat);
-    m.position.y = -len / 2; m.castShadow = true;
-    pivot.add(m);
-    g.add(pivot);
-    return pivot;
+export function animateHumanoid(h, phase, runFactor = 1) {
+  const s = Math.sin(phase), amp = 0.55 * runFactor;
+  h.legL.rotation.x = s * amp; h.legR.rotation.x = -s * amp;
+  h.armL.rotation.x = -s * amp * 0.8; h.armR.rotation.x = s * amp * 0.8;
+}
+
+// Perimeter point of a block's sidewalk loop. s runs 0..perim.
+function loopPoint(bi, bj, s) {
+  const o = BLOCK_HALF + 2.6, per = 8 * o;
+  s = ((s % per) + per) % per;
+  const cx = bi * PITCH, cz = bj * PITCH;
+  if (s < 2 * o) return { x: cx - o + s, z: cz - o, dir: [1, 0] };
+  s -= 2 * o;
+  if (s < 2 * o) return { x: cx + o, z: cz - o + s, dir: [0, 1] };
+  s -= 2 * o;
+  if (s < 2 * o) return { x: cx + o - s, z: cz + o, dir: [-1, 0] };
+  s -= 2 * o;
+  return { x: cx - o, z: cz + o - s, dir: [0, -1] };
+}
+
+export function spawnPeds(G, count = 26) {
+  for (let n = 0; n < count; n++) {
+    const bi = Math.floor(rr(-GRID, GRID + 0.99)), bj = Math.floor(rr(-GRID, GRID + 0.99));
+    const h = buildHumanoid();
+    G.scene.add(h.group);
+    G.peds.push({
+      h, x: 0, z: 0, yaw: 0, bi, bj, s: rr(0, 8 * (BLOCK_HALF + 2.6)),
+      dirSign: rnd() < 0.5 ? 1 : -1, speed: rr(1.1, 1.7), phase: rr(0, 6),
+      state: 'walk', fleeT: 0, downT: 0, threatX: 0, threatZ: 0,
+    });
+    const p = G.peds[G.peds.length - 1];
+    const pt = loopPoint(p.bi, p.bj, p.s); p.x = pt.x; p.z = pt.z;
   }
-  const legL = limb(pants, 0.17, 0.78, -0.14, 0.82, 0);
-  const legR = limb(pants, 0.17, 0.78, 0.14, 0.82, 0);
-  const armL = limb(skin, 0.13, 0.66, -0.34, 1.38, 0);
-  const armR = limb(skin, 0.13, 0.66, 0.34, 1.38, 0);
-  // short sleeves: tint the top of each arm with the shirt colour
-  g.userData.parts = { legL, legR, armL, armR, torso, head };
-  g.userData.phase = rng() * Math.PI * 2;
-  return g;
 }
 
-export function animatePerson(mesh, dt, speed) {
-  const u = mesh.userData;
-  u.phase += dt * (3 + speed * 1.6);
-  const swing = clamp(speed / 5, 0, 1.15) * 0.62;
-  const s = Math.sin(u.phase);
-  u.parts.legL.rotation.x = s * swing;
-  u.parts.legR.rotation.x = -s * swing;
-  u.parts.armL.rotation.x = -s * swing * 0.8;
-  u.parts.armR.rotation.x = s * swing * 0.8;
-  mesh.position.y = Math.abs(Math.cos(u.phase)) * 0.05 * clamp(speed / 5, 0, 1);
-}
-
-export class Pedestrians {
-  constructor(scene, city, rng) {
-    this.scene = scene;
-    this.city = city;
-    this.rng = rng;
-    this.peds = [];
-    this.threat = null; // {x, z, until} — set by gunfire / near misses
-    for (let i = 0; i < 26; i++) {
-      const mesh = buildPersonMesh(rng);
-      scene.add(mesh);
-      const ped = { mesh, speed: 0, heading: rng() * Math.PI * 2, fleeT: 0, fallenT: 0, ring: null, corner: 0 };
-      this.assignRing(ped, true);
-      this.peds.push(ped);
+// Returns events: [{type:'pedHit', ped}] for the wanted system.
+export function updatePeds(G, dt) {
+  const events = [];
+  const threat = G.threat; // {x,z,t} refreshed by gunfire / near-miss driving
+  for (const ped of G.peds) {
+    if (ped.state === 'pose') { // staged for screenshots: stand and idle
+      ped.phase += dt * 1.6;
+      animateHumanoid(ped.h, ped.phase, 0.12);
+      ped.h.group.position.set(ped.x, 0.24, ped.z);
+      ped.h.group.rotation.y = ped.yaw;
+      continue;
     }
-  }
-
-  // A ped walks the sidewalk ring around one block: corners at block centre ± (block/2 + 2.4).
-  assignRing(ped, randomStart = false) {
-    const i = Math.floor(this.rng() * CITY.blocks), j = Math.floor(this.rng() * CITY.blocks);
-    const cx = (i - (CITY.blocks - 1) / 2) * CITY.pitch;
-    const cz = (j - (CITY.blocks - 1) / 2) * CITY.pitch;
-    const o = CITY.block / 2 + 2.4;
-    ped.ring = [{ x: cx - o, z: cz - o }, { x: cx + o, z: cz - o }, { x: cx + o, z: cz + o }, { x: cx - o, z: cz + o }];
-    ped.corner = Math.floor(this.rng() * 4);
-    if (randomStart) {
-      const a = ped.ring[ped.corner], b = ped.ring[(ped.corner + 1) % 4];
-      const t = this.rng();
-      ped.mesh.position.set(a.x + (b.x - a.x) * t, 0, a.z + (b.z - a.z) * t);
+    if (ped.state === 'down') {
+      ped.downT -= dt;
+      ped.h.group.rotation.x = -Math.PI / 2;
+      ped.h.group.position.set(ped.x, 0.25, ped.z);
+      if (ped.downT <= 0) { // gets up somewhere else
+        ped.state = 'walk'; ped.h.group.rotation.x = 0;
+        ped.bi = Math.floor(rr(-GRID, GRID + 0.99)); ped.bj = Math.floor(rr(-GRID, GRID + 0.99));
+        ped.s = rr(0, 180);
+      }
+      continue;
+    }
+    // Start fleeing when a threat is close.
+    if (threat && G.time - threat.t < 2.5 && dist2d(ped.x, ped.z, threat.x, threat.z) < 16) {
+      ped.state = 'flee'; ped.fleeT = rr(2, 3.4); ped.threatX = threat.x; ped.threatZ = threat.z;
+    }
+    let speed = ped.speed;
+    if (ped.state === 'flee') {
+      ped.fleeT -= dt;
+      const away = yawToward(ped.threatX, ped.threatZ, ped.x, ped.z);
+      ped.yaw = angleLerp(ped.yaw, away, dt * 8);
+      ped.x += Math.sin(ped.yaw) * 4.3 * dt; ped.z += Math.cos(ped.yaw) * 4.3 * dt;
+      speed = 4.3;
+      if (ped.fleeT <= 0) { // rejoin the nearest block loop
+        ped.state = 'walk';
+        ped.bi = clamp(Math.round(ped.x / PITCH), -GRID, GRID);
+        ped.bj = clamp(Math.round(ped.z / PITCH), -GRID, GRID);
+        ped.s = 0;
+      }
     } else {
-      const a = ped.ring[ped.corner];
-      ped.mesh.position.set(a.x, 0, a.z);
+      ped.s += ped.dirSign * ped.speed * dt;
+      const pt = loopPoint(ped.bi, ped.bj, ped.s);
+      ped.x = pt.x; ped.z = pt.z;
+      ped.yaw = angleLerp(ped.yaw, Math.atan2(pt.dir[0] * ped.dirSign, pt.dir[1] * ped.dirSign), dt * 10);
+    }
+    ped.phase += speed * dt * 3.6;
+    animateHumanoid(ped.h, ped.phase, clamp(speed / 1.6, 0.4, 1.6));
+    ped.h.group.position.set(ped.x, 0.24, ped.z);
+    ped.h.group.rotation.y = ped.yaw;
+    // Knocked down by a moving car?
+    for (const car of G.cars) {
+      if (car.dead || Math.abs(car.speed) < 5.5) continue;
+      if (dist2d(ped.x, ped.z, car.x, car.z) < 1.7) {
+        ped.state = 'down'; ped.downT = 7;
+        events.push({ type: 'pedHit', ped, byPlayer: car === G.playerCar || car.kind === 'player' });
+        G.audio.punch();
+        break;
+      }
     }
   }
-
-  scare(x, z, seconds = 2.4) {
-    this.threat = { x, z, until: performance.now() / 1000 + seconds };
-  }
-
-  knockDown(ped) {
-    if (ped.fallenT <= 0) ped.fallenT = 2.6;
-  }
-
-  // A driver yanked out of a stolen car: appears at the door and runs for it.
-  releaseDriver(x, z) {
-    const mesh = buildPersonMesh(this.rng);
-    this.scene.add(mesh);
-    const ped = { mesh, speed: 0, heading: this.rng() * Math.PI * 2, fleeT: 2.6, fallenT: 0, ring: null, corner: 0 };
-    this.assignRing(ped);
-    mesh.position.set(x, 0, z);
-    this.peds.push(ped);
-    this.scare(x, z, 2.6);
-    return ped;
-  }
-
-  update(dt, nowSec) {
-    const threatActive = this.threat && nowSec < this.threat.until;
-    for (const ped of this.peds) {
-      const p = ped.mesh.position;
-      if (ped.fallenT > 0) {
-        ped.fallenT -= dt;
-        ped.mesh.rotation.x = -Math.PI / 2 + 0.12;
-        ped.mesh.position.y = 0.12;
-        if (ped.fallenT <= 0) { ped.mesh.rotation.x = 0; ped.mesh.position.y = 0; ped.fleeT = 2; }
-        continue;
-      }
-      let tx, tz, speed;
-      const dThreat = threatActive ? dist2d(p.x, p.z, this.threat.x, this.threat.z) : Infinity;
-      if (ped.fleeT > 0 || dThreat < 17) {
-        // run directly away from the threat
-        ped.fleeT = Math.max(ped.fleeT - dt, dThreat < 17 ? 0.7 : 0);
-        const away = Math.atan2(p.x - this.threat.x, p.z - this.threat.z);
-        ped.heading = away;
-        speed = 7.4;
-        tx = p.x + Math.sin(away) * 6; tz = p.z + Math.cos(away) * 6;
-      } else {
-        const target = ped.ring[(ped.corner + 1) % 4];
-        tx = target.x; tz = target.z; speed = 1.7;
-        if (dist2d(p.x, p.z, tx, tz) < 0.7) {
-          ped.corner = (ped.corner + 1) % 4;
-          if (this.rng() < 0.14) this.assignRing(ped); // wander off to another block
-          continue;
-        }
-        ped.heading = Math.atan2(tx - p.x, tz - p.z);
-      }
-      ped.speed = speed;
-      p.x += Math.sin(ped.heading) * speed * dt;
-      p.z += Math.cos(ped.heading) * speed * dt;
-      // keep peds out of buildings and on the map
-      for (const box of this.city.colliders) {
-        const nx = clamp(p.x, box.minX, box.maxX), nz = clamp(p.z, box.minZ, box.maxZ);
-        if (Math.hypot(p.x - nx, p.z - nz) < 0.45) { p.x = nx + (p.x - nx || 0.45); p.z = nz + (p.z - nz || 0); }
-      }
-      const b = this.city.bounds;
-      p.x = clamp(p.x, b.minX + 1, b.maxX - 1);
-      p.z = clamp(p.z, b.minZ + 1, b.maxZ - 1);
-      ped.mesh.rotation.y = ped.heading;
-      animatePerson(ped.mesh, dt, speed);
-    }
-  }
+  return events;
 }

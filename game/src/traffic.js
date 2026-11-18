@@ -1,118 +1,106 @@
-// HEATWAVE CITY — traffic AI: civilian cars that cruise the road grid, keep their lane,
-// brake for whatever is in front of them and honk when blocked. Also parks the
-// stealable cars along the kerbs.
+// HEATWAVE CITY — ambient traffic: parked cars plus lane-following drivers
+// who brake for obstacles, honk when stuck and turn at intersections.
 
-import { CITY, COLORS, clamp, angleDiff, dist2d } from './config.js';
-import { createCar, placeCar, stepCar } from './vehicles.js';
+import { THREE, ROADS, clamp, rr, ri, rnd, pick, angleWrap, yawToward, dist2d } from './config.js';
+import { createCar, stepCar } from './vehicles.js';
 
-const LANE = CITY.road / 4; // right-hand lane offset from the road centre line
+const laneFor = (axis, dir) => (axis === 'z' ? -4 * dir : 4 * dir);
 
-export class Traffic {
-  constructor(scene, city, rng) {
-    this.city = city;
-    this.cars = [];       // moving traffic
-    this.parked = [];     // kerbside cars waiting to be stolen
-    this.rng = rng;
-    const paint = COLORS.carPaint;
-    for (let i = 0; i < 14; i++) {
-      const car = createCar(scene, { color: paint[i % paint.length], kind: 'civilian' });
-      car.driver = 'traffic';
-      this.spawnOnRoad(car);
-      this.cars.push(car);
-    }
-    for (let i = 0; i < 16; i++) {
-      const car = createCar(scene, { color: paint[(i * 3 + 1) % paint.length], kind: 'civilian' });
-      car.driver = 'parked';
-      this.parkCar(car);
-      this.parked.push(car);
-    }
+export function spawnTraffic(G, parkedCount = 24, movingCount = 13) {
+  const scene = G.scene;
+  // Parked cars hug the kerb on random roads, clear of intersections.
+  for (let n = 0; n < parkedCount; n++) {
+    const vertical = rnd() < 0.5;
+    const road = pick(ROADS);
+    let along = rr(-268, 268);
+    if (ROADS.some((r) => Math.abs(r - along) < 13)) along += 20;
+    const side = rnd() < 0.5 ? -6.9 : 6.9;
+    const x = vertical ? road + side : along;
+    const z = vertical ? along : road + side;
+    const yaw = vertical ? (side > 0 ? Math.PI : 0) : (side > 0 ? -Math.PI / 2 : Math.PI / 2);
+    const car = createCar(scene, x, z, yaw + rr(-0.04, 0.04), { kind: 'parked' });
+    car.parked = true;
+    G.cars.push(car); G.parkedCars.push(car);
   }
-
-  allCars() { return this.cars.concat(this.parked); }
-
-  spawnOnRoad(car) {
-    const { roadsX, roadsZ } = this.city;
-    const ix = 1 + Math.floor(this.rng() * (roadsX.length - 2));
-    const iz = 1 + Math.floor(this.rng() * (roadsZ.length - 2));
-    const vertical = this.rng() < 0.5;
-    const dir = this.rng() < 0.5 ? 1 : -1;
-    car.navDir = vertical ? { x: 0, z: dir } : { x: dir, z: 0 };
-    const cx = roadsX[ix], cz = roadsZ[iz];
-    const right = rightOf(car.navDir);
-    placeCar(car, cx + right.x * LANE, cz + right.z * LANE, Math.atan2(car.navDir.x, car.navDir.z));
-    this.pickNext(car, cx, cz);
-  }
-
-  parkCar(car) {
-    const { roadsX, roadsZ } = this.city;
-    // park parallel along a random road, on the right kerb
-    const vertical = this.rng() < 0.5;
-    const road = vertical ? roadsX[Math.floor(this.rng() * roadsX.length)] : roadsZ[Math.floor(this.rng() * roadsZ.length)];
-    const along = (this.rng() * 2 - 1) * (this.city.bounds.maxX - 30);
-    const side = this.rng() < 0.5 ? 1 : -1;
-    const off = (CITY.road / 2 - 1.6) * side;
-    if (vertical) placeCar(car, road + off, along, side > 0 ? 0 : Math.PI);
-    else placeCar(car, along, road + off, side > 0 ? Math.PI / 2 : -Math.PI / 2);
-  }
-
-  // Choose the next intersection to aim for, from the one just reached.
-  pickNext(car, cx, cz) {
-    const { roadsX, roadsZ } = this.city;
-    const dirs = [];
-    const straight = car.navDir;
-    const options = [straight, { x: straight.z, z: straight.x }, { x: -straight.z, z: -straight.x }, { x: -straight.x, z: -straight.z }];
-    const weights = [0.55, 0.2, 0.2, 0.05];
-    for (let k = 0; k < options.length; k++) {
-      const d = options[k];
-      const nx = cx + d.x * CITY.pitch, nz = cz + d.z * CITY.pitch;
-      if (roadsX.includes(nx) && roadsZ.includes(nz)) dirs.push({ d, w: weights[k], nx, nz });
-    }
-    let sum = 0; for (const o of dirs) sum += o.w;
-    let roll = this.rng() * sum, pick = dirs[0];
-    for (const o of dirs) { roll -= o.w; if (roll <= 0) { pick = o; break; } }
-    car.navDir = pick.d;
-    const right = rightOf(pick.d);
-    car.navTarget = { x: pick.nx + right.x * LANE, z: pick.nz + right.z * LANE, cx: pick.nx, cz: pick.nz };
-  }
-
-  update(dt, world, playerPos) {
-    const everyone = this.allCars();
-    for (const car of this.cars) {
-      if (car.driver !== 'traffic') continue; // stolen cars leave the fleet
-      const p = car.mesh.position;
-      const t = car.navTarget;
-      if (dist2d(p.x, p.z, t.x, t.z) < 8) this.pickNext(car, t.cx, t.cz);
-      const desired = Math.atan2(t.x - p.x, t.z - p.z);
-      const steer = clamp(angleDiff(car.heading, desired) * 2.4, -1, 1);
-      // obstacle scan: anything 10 m ahead in the facing cone
-      let blocked = false, slow = false;
-      const fx = Math.sin(car.heading), fz = Math.cos(car.heading);
-      const check = (ox, oz, r) => {
-        const dx = ox - p.x, dz = oz - p.z;
-        const ahead = dx * fx + dz * fz;
-        if (ahead < 0 || ahead > 11) return;
-        const side = Math.abs(dx * fz - dz * fx);
-        if (side < r) { if (ahead < 6.5) blocked = true; else slow = true; }
-      };
-      for (const other of everyone) {
-        if (other === car) continue;
-        check(other.mesh.position.x, other.mesh.position.z, 2.4);
-      }
-      if (playerPos) check(playerPos.x, playerPos.z, 2.2);
-      let throttle = 0;
-      const targetSpeed = blocked ? 0 : slow ? 4 : 10.5;
-      if (car.speed < targetSpeed) throttle = 0.75;
-      else if (car.speed > targetSpeed + 1) throttle = -0.6;
-      if (blocked && car.speed < 0.4) {
-        car.honkCd -= dt;
-        if (car.honkCd <= 0) { car.honkCd = 1.4 + this.rng() * 2; if (world.onHonk) world.onHonk(p); }
-      }
-      stepCar(car, dt, { throttle, steer, handbrake: false }, world);
-    }
+  // Moving traffic on lanes.
+  for (let n = 0; n < movingCount; n++) {
+    const axis = rnd() < 0.5 ? 'z' : 'x';
+    const dir = rnd() < 0.5 ? 1 : -1;
+    const road = pick(ROADS);
+    const along = rr(-240, 240);
+    const x = axis === 'z' ? road + laneFor(axis, dir) : along;
+    const z = axis === 'z' ? along : road + laneFor(axis, dir);
+    const car = createCar(scene, x, z, axis === 'z' ? (dir > 0 ? 0 : Math.PI) : (dir > 0 ? Math.PI / 2 : -Math.PI / 2), { kind: 'traffic' });
+    car.nav = { axis, dir, fixed: road + laneFor(axis, dir), lastCross: '', stuck: 0, cruise: rr(10, 13.5) };
+    G.cars.push(car); G.trafficCars.push(car);
   }
 }
 
-function rightOf(dir) {
-  // right-hand side of travel direction (forward x up), for right-hand traffic
-  return { x: -dir.z, z: dir.x };
+function obstacleAhead(G, car, dist) {
+  const fx = Math.sin(car.yaw), fz = Math.cos(car.yaw);
+  for (const other of G.cars) {
+    if (other === car || other.dead) continue;
+    const dx = other.x - car.x, dz = other.z - car.z;
+    const fwd = dx * fx + dz * fz;
+    if (fwd < 0.5 || fwd > dist) continue;
+    if (Math.abs(dx * fz - dz * fx) < 2.4) return other;
+  }
+  for (const ped of G.peds) {
+    if (ped.state === 'down') continue;
+    const dx = ped.x - car.x, dz = ped.z - car.z;
+    const fwd = dx * fx + dz * fz;
+    if (fwd > 0.5 && fwd < dist * 0.8 && Math.abs(dx * fz - dz * fx) < 2) return ped;
+  }
+  return null;
+}
+
+export function updateTraffic(G, dt) {
+  for (const car of G.trafficCars) {
+    if (car.dead || car === G.playerCar) continue;
+    const nav = car.nav;
+    // Recycle cars that drift too far from the player.
+    if (dist2d(car.x, car.z, G.playerPos.x, G.playerPos.z) > 340) {
+      const axis = rnd() < 0.5 ? 'z' : 'x';
+      const dir = rnd() < 0.5 ? 1 : -1;
+      const road = pick(ROADS);
+      nav.axis = axis; nav.dir = dir; nav.fixed = road + laneFor(axis, dir);
+      car.x = axis === 'z' ? nav.fixed : G.playerPos.x + rr(-160, 160);
+      car.z = axis === 'z' ? G.playerPos.z + rr(-160, 160) : nav.fixed;
+      car.speed = 0;
+    }
+    // Intersection turns.
+    const crossCoord = nav.axis === 'z' ? car.z : car.x;
+    for (const r of ROADS) {
+      if (Math.abs(crossCoord - r) < 2.4) {
+        const key = `${nav.axis}:${r}`;
+        if (nav.lastCross !== key) {
+          nav.lastCross = key;
+          if (rnd() < 0.38) {
+            const newAxis = nav.axis === 'z' ? 'x' : 'z';
+            const newDir = rnd() < 0.5 ? 1 : -1;
+            nav.fixed = r + laneFor(newAxis, newDir);
+            nav.axis = newAxis; nav.dir = newDir;
+          }
+        }
+      }
+    }
+    const target = nav.axis === 'z'
+      ? { x: nav.fixed, z: car.z + nav.dir * 26 }
+      : { x: car.x + nav.dir * 26, z: nav.fixed };
+    const desired = yawToward(car.x, car.z, target.x, target.z);
+    const steer = clamp(angleWrap(desired - car.yaw) * 2.4, -1, 1);
+    const blocked = obstacleAhead(G, car, 10);
+    let throttle = 0, brake = false;
+    if (blocked) {
+      brake = car.speed > 1;
+      nav.stuck += dt;
+      if (nav.stuck > 1.6 && car.honkCd <= 0) { G.audio.horn(); car.honkCd = rr(3, 7); }
+    } else {
+      nav.stuck = 0;
+      throttle = car.speed < nav.cruise ? 0.75 : 0;
+      if (car.speed > nav.cruise + 1) brake = true;
+    }
+    car.honkCd -= dt;
+    stepCar(car, { throttle, steer, brake }, dt, G.colliders);
+  }
 }

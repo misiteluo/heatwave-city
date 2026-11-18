@@ -1,145 +1,156 @@
-// HEATWAVE CITY — the HUD: DOM panels (wanted stars, cash, health, objective banner,
-// prompts, toasts, dialogue) and the 2D canvas minimap with police and mission blips.
+// HEATWAVE CITY — the HUD and screens, all DOM over the canvas: minimap,
+// wanted stars, cash/health, objective banner, prompts, toasts, damage
+// vignette, and the menu / pause / BUSTED / WASTED overlays.
 
-import { clamp } from './config.js';
+import { ROADS, clamp } from './config.js';
 
-export class HUD {
-  constructor() {
-    this.el = {};
-    for (const id of ['hud', 'minimap', 'wanted', 'objective', 'objText', 'objDist', 'cash', 'healthBar', 'armorLine',
-      'speedo', 'speedNum', 'prompt', 'crosshair', 'bustWrap', 'bustBar', 'toast', 'dialog', 'vignette']) {
-      this.el[id] = document.getElementById(id);
+function el(tag, cls, parent, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  if (parent) parent.appendChild(e);
+  return e;
+}
+
+export function initHud(G, cb) {
+  const ui = document.getElementById('ui');
+  const hud = { toastT: 0, lastStars: -1, lastCash: -1, prompt: '' };
+
+  hud.map = el('canvas', 'minimap', ui); hud.map.width = 190; hud.map.height = 190;
+  hud.banner = el('div', 'banner', ui);
+  hud.stars = el('div', 'stars', ui);
+  hud.stats = el('div', 'stats', ui);
+  hud.cashEl = el('div', 'cash', hud.stats);
+  hud.hpWrap = el('div', 'hpwrap', hud.stats);
+  hud.hpBar = el('div', 'hpbar', hud.hpWrap);
+  hud.ammoEl = el('div', 'ammo', hud.stats);
+  hud.speed = el('div', 'speed', ui);
+  hud.promptEl = el('div', 'prompt', ui);
+  hud.toastEl = el('div', 'toast', ui);
+  hud.cross = el('div', 'crosshair', ui, '+');
+  hud.vignette = el('div', 'vignette', ui);
+
+  // --- menu -----------------------------------------------------------------
+  const menu = el('div', 'overlay menu', ui);
+  el('div', 'gametitle', menu, 'HEATWAVE CITY');
+  el('div', 'tagline', menu, 'One city. Five jobs. No brakes.');
+  el('p', 'story', menu, 'Jett is a wheelman with empty pockets in a sun-soaked coastal city. Fixer Mara Voss has work: steal, run, collect, escape. Finish all five jobs, outrun the Heatwave PD, and the city is yours.');
+  const btnRow = el('div', 'btnrow', menu);
+  hud.newBtn = el('button', 'btn', btnRow, 'New Game');
+  hud.contBtn = el('button', 'btn', btnRow, 'Continue');
+  hud.newBtn.onclick = () => cb.onNew();
+  hud.contBtn.onclick = () => cb.onContinue();
+  el('div', 'controls', menu, 'WASD move · Shift sprint · Mouse drag look · E enter/exit car · F or Click attack · 1/2 fists/pistol · R reload · Space handbrake · P pause · M mute');
+  hud.menu = menu;
+
+  // --- pause ------------------------------------------------------------------
+  const pause = el('div', 'overlay small', ui);
+  el('div', 'overtitle', pause, 'PAUSED');
+  const resumeBtn = el('button', 'btn', pause, 'Resume');
+  resumeBtn.onclick = () => cb.onResume();
+  pause.style.display = 'none';
+  hud.pause = pause;
+
+  // --- busted / wasted ----------------------------------------------------------
+  const end = el('div', 'overlay small', ui);
+  hud.endTitle = el('div', 'overtitle', end);
+  hud.endText = el('p', 'story', end);
+  const respawnBtn = el('button', 'btn', end, 'Back on the street');
+  respawnBtn.onclick = () => cb.onRespawn();
+  end.style.display = 'none';
+  hud.end = end;
+
+  hud.toast = (text, sec = 3) => { hud.toastEl.textContent = text; hud.toastEl.style.opacity = '1'; hud.toastT = sec; };
+  hud.showEnd = (kind, text) => {
+    hud.endTitle.textContent = kind === 'busted' ? 'BUSTED' : 'WASTED';
+    hud.endTitle.style.color = kind === 'busted' ? '#6db3ff' : '#ff5a4e';
+    hud.endText.textContent = text;
+    hud.end.style.display = 'flex';
+  };
+  hud.hideEnd = () => { hud.end.style.display = 'none'; };
+  G.hud = hud;
+  return hud;
+}
+
+const MAP_MIN = -300, MAP_SIZE = 700;
+const mx = (x) => (x - MAP_MIN) / MAP_SIZE * 190;
+const mz = (z) => (z - MAP_MIN) / MAP_SIZE * 190;
+
+function drawMap(G) {
+  const c = G.hud.map.getContext('2d');
+  c.fillStyle = '#17394a'; c.fillRect(0, 0, 190, 190);
+  c.fillStyle = '#c9b078'; c.fillRect(0, mz(292), 190, mz(400) - mz(292));       // beach
+  c.fillStyle = '#2e8fb8'; c.fillRect(0, mz(332), 190, 190 - mz(332));          // sea
+  c.strokeStyle = '#66727e'; c.lineWidth = 2.6;
+  for (const r of ROADS) {
+    c.beginPath(); c.moveTo(mx(r), mz(-280)); c.lineTo(mx(r), mz(280)); c.stroke();
+    c.beginPath(); c.moveTo(mx(-280), mz(r)); c.lineTo(mx(280), mz(r)); c.stroke();
+  }
+  c.beginPath(); c.moveTo(mx(-280), mz(280)); c.lineTo(mx(280), mz(280)); c.stroke();
+  const dot = (x, z, color, r) => { c.fillStyle = color; c.beginPath(); c.arc(mx(x), mz(z), r, 0, 7); c.fill(); };
+  for (const car of G.trafficCars) dot(car.x, car.z, '#9aa4ad', 1.4);
+  for (const e of G.enemies) if (!e.dead) dot(e.x, e.z, '#ff4b3e', 2.2);
+  for (const car of G.policeCars) dot(car.x, car.z, '#3f8cff', 2.6);
+  if (G.objective) {
+    const pulse = 3.4 + Math.sin(G.time * 5) * 1.1;
+    c.strokeStyle = '#ffc93c'; c.lineWidth = 1.6;
+    c.beginPath(); c.arc(mx(G.objective.x), mz(G.objective.z), pulse + 2.4, 0, 7); c.stroke();
+    dot(G.objective.x, G.objective.z, '#ffc93c', 2.8);
+  }
+  // player arrow
+  const px = mx(G.playerPos.x), pz = mz(G.playerPos.z);
+  const yaw = G.mode === 'car' && G.playerCar ? G.playerCar.yaw : G.player.yaw;
+  c.save(); c.translate(px, pz); c.rotate(Math.atan2(Math.sin(yaw), -Math.cos(yaw)));
+  c.fillStyle = '#ffffff';
+  c.beginPath(); c.moveTo(0, -5.4); c.lineTo(3.6, 4.4); c.lineTo(-3.6, 4.4); c.closePath(); c.fill();
+  c.restore();
+  c.fillStyle = '#dff3ff'; c.font = 'bold 10px system-ui'; c.fillText('N', 92, 12);
+}
+
+export function updateHud(G, dt) {
+  const hud = G.hud;
+  const playing = G.mode === 'foot' || G.mode === 'car';
+  hud.map.style.display = playing ? 'block' : 'none';
+  hud.cross.style.display = playing && !G.paused && !G.over ? 'block' : 'none';
+  if (playing) drawMap(G);
+  // stars
+  const stars = G.wanted.stars;
+  if (stars !== hud.lastStars) {
+    hud.lastStars = stars;
+    hud.stars.innerHTML = '';
+    for (let i = 0; i < 5; i++) {
+      const s = document.createElement('span');
+      s.textContent = '★';
+      s.className = i < stars ? 'star on' : 'star';
+      hud.stars.appendChild(s);
     }
-    this.mapCtx = this.el.minimap.getContext('2d');
-    this.toastTimer = null;
-    this.dialogTimer = null;
-    this.vignetteLevel = 0;
-    this.lastStars = -1;
   }
-
-  show() { this.el.hud.classList.remove('hidden'); }
-  hide() { this.el.hud.classList.add('hidden'); }
-
-  setCash(n) { this.el.cash.innerHTML = `<small>CASH</small>$${Math.max(0, Math.floor(n)).toLocaleString('en-US')}`; }
-  setHealth(frac) { this.el.healthBar.style.width = `${clamp(frac, 0, 1) * 100}%`; }
-  setInfo(text) { this.el.armorLine.textContent = text || ''; }
-
-  setWanted(stars) {
-    if (stars === this.lastStars) return;
-    const flash = stars > this.lastStars && stars > 0;
-    this.lastStars = stars;
-    let html = '';
-    for (let i = 0; i < 5; i++) html += i < stars ? '★' : '<span class="off">★</span>';
-    this.el.wanted.innerHTML = html;
-    if (flash) {
-      this.el.wanted.classList.remove('flash');
-      void this.el.wanted.offsetWidth;
-      this.el.wanted.classList.add('flash');
-    }
-  }
-
-  setObjective(text, dist) {
-    if (!text) { this.el.objective.classList.add('hidden'); return; }
-    this.el.objective.classList.remove('hidden');
-    this.el.objText.textContent = text;
-    this.el.objDist.textContent = dist != null ? `${Math.round(dist)}m` : '';
-  }
-
-  setPrompt(html) {
-    if (!html) { this.el.prompt.classList.add('hidden'); return; }
-    this.el.prompt.classList.remove('hidden');
-    this.el.prompt.innerHTML = html;
-  }
-
-  setSpeed(mph) {
-    if (mph == null) { this.el.speedo.classList.add('hidden'); return; }
-    this.el.speedo.classList.remove('hidden');
-    this.el.speedNum.textContent = String(Math.round(Math.abs(mph)));
-  }
-
-  setCrosshair(on) { this.el.crosshair.classList.toggle('hidden', !on); }
-
-  setBust(frac) {
-    if (frac == null) { this.el.bustWrap.classList.add('hidden'); return; }
-    this.el.bustWrap.classList.remove('hidden');
-    this.el.bustBar.style.width = `${clamp(frac, 0, 1) * 100}%`;
-  }
-
-  damagePulse() { this.vignetteLevel = Math.min(1, this.vignetteLevel + 0.55); }
-
-  toast(text, ms = 3400) {
-    this.el.toast.textContent = text;
-    this.el.toast.style.opacity = '1';
-    clearTimeout(this.toastTimer);
-    this.toastTimer = setTimeout(() => { this.el.toast.style.opacity = '0'; }, ms);
-  }
-
-  dialog(speaker, text, ms = 5200) {
-    this.el.dialog.innerHTML = `<b>${speaker}:</b> ${text}`;
-    this.el.dialog.style.opacity = '1';
-    clearTimeout(this.dialogTimer);
-    this.dialogTimer = setTimeout(() => { this.el.dialog.style.opacity = '0'; }, ms);
-  }
-
-  update(dt) {
-    if (this.vignetteLevel > 0) {
-      this.vignetteLevel = Math.max(0, this.vignetteLevel - dt * 1.4);
-      this.el.vignette.style.opacity = String(this.vignetteLevel);
-    }
-  }
-
-  // view: { city, playerPos, playerHeading, cops: [car], mission: {x,z}|null, inCar }
-  drawMinimap(view) {
-    const g = this.mapCtx;
-    const S = 188;
-    const ext = 640; // world span mapped onto the square (x: -300..340 z)
-    const px = (x) => ((x + 300) / ext) * S;
-    const py = (z) => ((z + 300) / ext) * S;
-    g.fillStyle = '#232830';
-    g.fillRect(0, 0, S, S);
-    // ocean + beach along the south edge
-    const beachY = py(278);
-    g.fillStyle = '#e8cf9e'; g.fillRect(0, beachY, S, py(344) - beachY);
-    g.fillStyle = '#2e7fa8'; g.fillRect(0, py(344), S, S - py(344));
-    // blocks
-    g.fillStyle = '#31363f';
-    const { roadsX, roadsZ } = view.city;
-    for (let i = 0; i < roadsX.length - 1; i++) {
-      for (let j = 0; j < roadsZ.length - 1; j++) {
-        const x0 = px((roadsX[i] + roadsX[i + 1]) / 2 - 22), x1 = px((roadsX[i] + roadsX[i + 1]) / 2 + 22);
-        const y0 = py((roadsZ[j] + roadsZ[j + 1]) / 2 - 22), y1 = py((roadsZ[j] + roadsZ[j + 1]) / 2 + 22);
-        g.fillRect(x0, y0, x1 - x0, y1 - y0);
-      }
-    }
-    // roads
-    g.strokeStyle = '#59606c'; g.lineWidth = 2;
-    for (const x of roadsX) { g.beginPath(); g.moveTo(px(x), py(-278)); g.lineTo(px(x), py(278)); g.stroke(); }
-    for (const z of roadsZ) { g.beginPath(); g.moveTo(px(-278), py(z)); g.lineTo(px(278), py(z)); g.stroke(); }
-    // mission marker (pulsing gold)
-    if (view.mission) {
-      const pulse = 3.4 + Math.sin(performance.now() * 0.006) * 1.1;
-      g.fillStyle = '#ffd23e';
-      g.beginPath(); g.arc(px(view.mission.x), py(view.mission.z), pulse, 0, Math.PI * 2); g.fill();
-      g.strokeStyle = 'rgba(255,210,62,0.5)';
-      g.beginPath(); g.arc(px(view.mission.x), py(view.mission.z), pulse + 3.4, 0, Math.PI * 2); g.stroke();
-    }
-    // police blips
-    g.fillStyle = '#4e8dff';
-    for (const cop of view.cops) {
-      g.beginPath(); g.arc(px(cop.mesh.position.x), py(cop.mesh.position.z), 2.6, 0, Math.PI * 2); g.fill();
-    }
-    // player arrow
-    const cx = px(view.playerPos.x), cy = py(view.playerPos.z);
-    const h = view.playerHeading;
-    g.save();
-    g.translate(cx, cy);
-    g.rotate(Math.PI - view.playerHeading); // map is north-up; arrow model points up
-    g.fillStyle = '#ffffff';
-    g.beginPath(); g.moveTo(0, -6); g.lineTo(4.4, 5); g.lineTo(0, 2.4); g.lineTo(-4.4, 5); g.closePath(); g.fill();
-    g.restore();
-    // north label
-    g.fillStyle = 'rgba(255,255,255,0.85)';
-    g.font = 'bold 11px Arial'; g.textAlign = 'right';
-    g.fillText('N', S - 7, 15);
-  }
+  hud.stars.style.display = stars > 0 ? 'block' : 'none';
+  // banner
+  const obj = playing ? G.objective : null;
+  hud.banner.style.display = obj ? 'block' : 'none';
+  if (obj && hud.banner.textContent !== obj.text) hud.banner.textContent = obj.text;
+  // stats
+  hud.stats.style.display = playing ? 'block' : 'none';
+  if (G.cash !== hud.lastCash) { hud.lastCash = G.cash; hud.cashEl.textContent = `$${G.cash}`; }
+  const hp = clamp(G.player.hp, 0, 100);
+  hud.hpBar.style.width = `${hp}%`;
+  hud.hpBar.style.background = hp > 50 ? '#51e05e' : hp > 25 ? '#ffc93c' : '#ff5a4e';
+  hud.ammoEl.textContent = G.pistol
+    ? (G.weapon === 'pistol' ? `PISTOL ${G.ammo.mag} / ${G.ammo.reserve}${G.reloading > 0 ? ' …' : ''}` : 'FISTS · press 2 for pistol')
+    : 'FISTS';
+  // speed
+  if (G.mode === 'car' && G.playerCar) {
+    hud.speed.style.display = 'block';
+    hud.speed.textContent = `${Math.round(Math.abs(G.playerCar.speed) * 3.6)} km/h`;
+  } else hud.speed.style.display = 'none';
+  // prompt
+  const prompt = playing ? (G.prompt || G.missionPrompt || '') : '';
+  hud.promptEl.style.display = prompt ? 'block' : 'none';
+  if (hud.promptEl.textContent !== prompt) hud.promptEl.textContent = prompt;
+  // toast
+  if (hud.toastT > 0) { hud.toastT -= dt; if (hud.toastT <= 0) hud.toastEl.style.opacity = '0'; }
+  // vignette
+  const lowHp = G.player.hp < 30 && playing ? 0.16 + Math.sin(G.time * 6) * 0.05 : 0;
+  hud.vignette.style.opacity = String(clamp(G.hurtT * 0.85 + lowHp, 0, 0.9));
 }

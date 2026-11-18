@@ -1,12 +1,11 @@
-// HEATWAVE CITY — a complete open-world crime game for gta6-01 (Node 22, standard library
-// only): the game is this directory's game/ folder, plain static files a desktop browser
-// loads offline (game/index.html, three.js vendored under game/vendor/, and the game's own
-// ES modules under game/src/ — no network request), and this program hands it in. It copies
-// game/ and screenshots/ from beside this file to /output and writes /output/dossier.json,
-// the summary the judge reads, with the vendored make.fun library.
+// HEATWAVE CITY — a gta6-01 entry (Node 22, standard library only). The game is this
+// directory's game/ folder: a 3D open-world crime game (three.js r128 vendored under
+// game/vendor/, everything else plain ES modules, no network requests) where you roam a
+// sun-soaked coastal city on foot and by car, steal rides, run five story jobs for fixer
+// Mara Voss, fight, and outrun the Heatwave PD. This program hands it in: it copies game/
+// and screenshots/ from beside this file to /output and writes /output/dossier.json, the
+// summary the judge reads, with the vendored make.fun library.
 //
-// The game: roam the sun-soaked city of Caldera Bay on foot and by car, steal cars, run
-// Mara Voss's five-job story, fight the Solano crew, and outrun the CBPD's wanted system.
 // Serve it locally with `node serve.ts`, then open http://localhost:8080.
 // Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:
 //   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts

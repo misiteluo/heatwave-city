@@ -1,159 +1,219 @@
-// HEATWAVE CITY — combat: the player's punch and pistol (hitscan with tracers and
-// muzzle flash), plus rival gang members who shoot back and wear health bars.
+// HEATWAVE CITY — combat: fists, a hitscan pistol with tracers and muzzle
+// flash, ammo pickups, and gang enemies who keep their distance, shoot back
+// in bursts and wear floating health bars.
 
-import { PLAYER, clamp, dist2d, angleDiff } from './config.js';
-import { buildPersonMesh, animatePerson } from './pedestrians.js';
-import { makeGlowTexture } from './textures.js';
+import { THREE, clamp, rr, rnd, dist2d, yawToward, angleLerp } from './config.js';
+import { buildHumanoid, animateHumanoid } from './pedestrians.js';
+import { addCrime } from './police.js';
 
-const ENEMY_HP = 100;
+export function initCombat(G) {
+  G.weapon = 'fist';
+  G.pistol = false;
+  G.ammo = { mag: 12, reserve: 48 };
+  G.reloading = 0;
+  G.enemies = [];
+  G.pickups = [];
+  G.tracers = [];
+  G.hurtT = 0;
+}
 
-export class Combat {
-  constructor(scene, rng) {
-    this.scene = scene;
-    this.rng = rng;
-    this.enemies = [];
-    this.tracers = [];
-    this.flashTex = makeGlowTexture('rgba(255,220,130,1)', 'rgba(255,140,40,0)');
-    this.flash = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.flashTex, transparent: true, opacity: 0, depthWrite: false }));
-    this.flash.scale.set(1.4, 1.4, 1);
-    scene.add(this.flash);
-    this.flashT = 0;
-  }
+const barBgGeo = new THREE.BoxGeometry(1.1, 0.13, 0.02);
+const barFgGeo = new THREE.BoxGeometry(1.04, 0.09, 0.03);
+export function spawnEnemy(G, x, z) {
+  const h = buildHumanoid(0x8d0801, 0x1a1a1a, 0xc68863);
+  G.scene.add(h.group);
+  const bg = new THREE.Mesh(barBgGeo, new THREE.MeshBasicMaterial({ color: 0x14181d }));
+  bg.position.y = 2.05; h.group.add(bg);
+  const fg = new THREE.Mesh(barFgGeo, new THREE.MeshBasicMaterial({ color: 0x51e05e }));
+  fg.position.y = 2.05; h.group.add(fg);
+  const e = {
+    h, barFg: fg, x, z, yaw: rr(0, 6), hp: 100, phase: rr(0, 6),
+    state: 'idle', burstCd: rr(1, 2.4), burstLeft: 0, shotCd: 0, strafe: rnd() < 0.5 ? 1 : -1, dead: false,
+  };
+  h.group.position.set(x, 0.24, z);
+  G.enemies.push(e);
+  return e;
+}
 
-  spawnEnemy(x, z) {
-    const mesh = buildPersonMesh(this.rng, { shirt: 0x22252b, pants: 0x17181c, skin: 0x8a5a3b });
-    mesh.position.set(x, 0, z);
-    this.scene.add(mesh);
-    // health bar sprite
-    const c = document.createElement('canvas'); c.width = 64; c.height = 10;
-    const bar = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), depthWrite: false }));
-    bar.scale.set(1.7, 0.27, 1);
-    bar.position.y = 2.05;
-    mesh.add(bar);
-    const e = { mesh, health: ENEMY_HP, shootCd: 1 + this.rng() * 1.4, strafeDir: this.rng() < 0.5 ? 1 : -1, strafeT: 2, bar, barCanvas: c, dead: false };
-    this.drawBar(e);
-    this.enemies.push(e);
-    return e;
-  }
+export function damagePlayer(G, n) {
+  if (G.mode === 'menu' || G.over) return;
+  G.player.hp -= n;
+  G.hurtT = 0.55;
+  G.audio.hit();
+}
 
-  drawBar(e) {
-    const g = e.barCanvas.getContext('2d');
-    g.fillStyle = 'rgba(0,0,0,0.65)'; g.fillRect(0, 0, 64, 10);
-    g.fillStyle = e.health > 40 ? '#7dff8a' : '#ff5147';
-    g.fillRect(1, 1, 62 * clamp(e.health / ENEMY_HP, 0, 1), 8);
-    e.bar.material.map.needsUpdate = true;
-  }
+function tracer(G, x0, y0, z0, x1, y1, z1, color = 0xffe08a) {
+  const geo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(x0, y0, z0), new THREE.Vector3(x1, y1, z1)]);
+  const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.95 }));
+  G.scene.add(line);
+  G.tracers.push({ line, life: 0.07 });
+}
 
-  clearEnemies() {
-    for (const e of this.enemies) this.scene.remove(e.mesh);
-    this.enemies = [];
-  }
-
-  aliveCount() { return this.enemies.filter((e) => !e.dead).length; }
-
-  damageEnemy(e, dmg, hooks) {
-    if (e.dead) return;
-    e.health -= dmg;
-    this.drawBar(e);
-    if (e.health <= 0) {
-      e.dead = true;
-      e.mesh.rotation.x = -Math.PI / 2;
-      e.mesh.position.y = 0.12;
-      e.bar.visible = false;
-      if (hooks && hooks.onEnemyDown) hooks.onEnemyDown(e);
+function segmentBlocked(G, x0, z0, x1, z1) {
+  // 2D segment vs building AABBs (slab test per box).
+  const dx = x1 - x0, dz = z1 - z0;
+  for (const b of G.colliders) {
+    let t0 = 0, t1 = 1;
+    if (Math.abs(dx) < 1e-9) { if (x0 < b.x0 || x0 > b.x1) continue; }
+    else {
+      let ta = (b.x0 - x0) / dx, tb = (b.x1 - x0) / dx;
+      if (ta > tb) [ta, tb] = [tb, ta];
+      t0 = Math.max(t0, ta); t1 = Math.min(t1, tb);
+      if (t0 > t1) continue;
     }
+    if (Math.abs(dz) < 1e-9) { if (z0 < b.z0 || z0 > b.z1) continue; }
+    else {
+      let ta = (b.z0 - z0) / dz, tb = (b.z1 - z0) / dz;
+      if (ta > tb) [ta, tb] = [tb, ta];
+      t0 = Math.max(t0, ta); t1 = Math.min(t1, tb);
+      if (t0 > t1) continue;
+    }
+    if (t1 > 0.02 && t0 < 0.98) return true;
   }
+  return false;
+}
 
-  // Punch: hits the closest enemy (or reports a car/ped in range) in front of the player.
-  playerPunch(playerPos, heading, hooks) {
-    let best = null, bd = PLAYER.punchRange;
-    for (const e of this.enemies) {
+export function playerAttack(G) {
+  const p = G.player;
+  if (G.mode !== 'foot' || p.attackCd > 0) return;
+  if (G.weapon === 'pistol' && G.pistol) {
+    if (G.reloading > 0) return;
+    if (G.ammo.mag <= 0) { G.hud.toast('Empty — R to reload'); p.attackCd = 0.25; return; }
+    p.attackCd = 0.17;
+    G.ammo.mag--;
+    G.audio.shoot();
+    addCrime(G, 55, p.x, p.z);
+    // Hitscan along the camera's forward.
+    const dir = new THREE.Vector3();
+    G.camera.getWorldDirection(dir);
+    const ox = G.camera.position.x, oy = G.camera.position.y, oz = G.camera.position.z;
+    let bestT = 70, hitEnemy = null;
+    for (const e of G.enemies) {
       if (e.dead) continue;
-      const d = dist2d(playerPos.x, playerPos.z, e.mesh.position.x, e.mesh.position.z);
-      if (d < bd) { bd = d; best = e; }
+      // distance from the ray to the enemy's chest point
+      const ex = e.x - ox, ey = 1.25 - oy, ez = e.z - oz;
+      const t = ex * dir.x + ey * dir.y + ez * dir.z;
+      if (t < 1 || t > 70) continue;
+      const px = ox + dir.x * t - e.x, py = oy + dir.y * t - 1.25, pz = oz + dir.z * t - e.z;
+      if (px * px + py * py + pz * pz < 0.55 && t < bestT) { bestT = t; hitEnemy = e; }
     }
-    if (best) {
-      this.damageEnemy(best, PLAYER.punchDamage, hooks);
-      // knockback
-      best.mesh.position.x += Math.sin(heading) * 0.7;
-      best.mesh.position.z += Math.cos(heading) * 0.7;
-      return 'enemy';
+    let endT = bestT;
+    if (!hitEnemy) { // stop the tracer at the first building face (rough: full range unless blocked in 2D)
+      endT = segmentBlocked(G, ox, oz, ox + dir.x * 70, oz + dir.z * 70) ? 26 : 70;
     }
-    return null;
-  }
-
-  // Pistol hitscan along the camera's aim. aimDir: {x,z} unit vector on the ground plane.
-  playerShoot(playerPos, aimDir, hooks) {
-    const origin = { x: playerPos.x + aimDir.x * 0.5, z: playerPos.z + aimDir.z * 0.5 };
-    let best = null, bestAlong = 65;
-    for (const e of this.enemies) {
-      if (e.dead) continue;
-      const dx = e.mesh.position.x - origin.x, dz = e.mesh.position.z - origin.z;
-      const along = dx * aimDir.x + dz * aimDir.z;
-      if (along < 0 || along > bestAlong) continue;
-      const side = Math.abs(dx * aimDir.z - dz * aimDir.x);
-      if (side < 0.85) { best = e; bestAlong = along; }
+    tracer(G, p.x + Math.sin(p.yaw) * 0.4, 1.35, p.z + Math.cos(p.yaw) * 0.4, ox + dir.x * endT, oy + dir.y * endT, oz + dir.z * endT);
+    if (hitEnemy) damageEnemy(G, hitEnemy, 34);
+    if (G.ammo.mag === 0 && G.ammo.reserve > 0) startReload(G);
+  } else {
+    p.attackCd = 0.34;
+    G.audio.punch();
+    p.h.armR.rotation.x = -1.9;
+    const fx = p.x + Math.sin(p.yaw) * 1.6, fz = p.z + Math.cos(p.yaw) * 1.6;
+    for (const e of G.enemies) if (!e.dead && dist2d(fx, fz, e.x, e.z) < 1.5) damageEnemy(G, e, 30);
+    for (const ped of G.peds) {
+      if (ped.state !== 'down' && dist2d(fx, fz, ped.x, ped.z) < 1.4) {
+        ped.state = 'down'; ped.downT = 6;
+        addCrime(G, 90, p.x, p.z);
+        G.events.push({ type: 'pedHit', ped, byPlayer: true });
+      }
     }
-    const end = best
-      ? { x: best.mesh.position.x, z: best.mesh.position.z }
-      : { x: origin.x + aimDir.x * 55, z: origin.z + aimDir.z * 55 };
-    this.spawnTracer(origin, end, 0xffd98a);
-    this.flash.position.set(origin.x, 1.42, origin.z);
-    this.flash.material.opacity = 0.95;
-    this.flashT = 0.05;
-    if (best) this.damageEnemy(best, 34, hooks);
-    return best;
   }
+}
 
-  spawnTracer(a, b, color) {
-    const geo = new THREE.BufferGeometry().setFromPoints([
-      new THREE.Vector3(a.x, 1.42, a.z), new THREE.Vector3(b.x, 1.35, b.z),
-    ]);
-    const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.9 }));
-    this.scene.add(line);
-    this.tracers.push({ line, life: 0.07 });
+export function startReload(G) {
+  if (G.reloading > 0 || G.ammo.reserve <= 0 || G.ammo.mag >= 12) return;
+  G.reloading = 1.05;
+  G.hud.toast('Reloading…');
+}
+
+export function damageEnemy(G, e, n) {
+  if (e.dead) return;
+  e.hp -= n;
+  e.state = 'combat';
+  G.audio.hit();
+  e.barFg.scale.x = clamp(e.hp / 100, 0, 1);
+  e.barFg.material.color.setHSL(clamp(e.hp / 100, 0, 1) * 0.33, 0.85, 0.5);
+  if (e.hp <= 0) {
+    e.dead = true; e.state = 'down';
+    e.h.group.rotation.x = -Math.PI / 2;
+    e.h.group.position.y = 0.3;
+    G.events.push({ type: 'enemyDown', enemy: e });
+    if (rnd() < 0.6) dropAmmo(G, e.x, e.z);
   }
+}
 
-  // Enemy behaviour: keep 10–18 m from the player, strafe, fire in bursts.
-  update(dt, ctx) {
-    // ctx: { playerPos, playerInCar, onPlayerHit(dmg), world }
-    for (const e of this.enemies) {
-      if (e.dead) continue;
-      const p = e.mesh.position;
-      const d = dist2d(p.x, p.z, ctx.playerPos.x, ctx.playerPos.z);
-      e.mesh.rotation.y = Math.atan2(ctx.playerPos.x - p.x, ctx.playerPos.z - p.z);
-      let speed = 0;
-      if (d < 42) {
-        // range keeping + strafe
-        let mx = 0, mz = 0;
-        const away = Math.atan2(p.x - ctx.playerPos.x, p.z - ctx.playerPos.z);
-        if (d > 19) { mx = -Math.sin(away); mz = -Math.cos(away); speed = 3.4; }
-        else if (d < 9) { mx = Math.sin(away); mz = Math.cos(away); speed = 3; }
-        e.strafeT -= dt;
-        if (e.strafeT <= 0) { e.strafeDir *= -1; e.strafeT = 1.4 + this.rng() * 1.6; }
-        mx += Math.cos(away) * e.strafeDir * 0.7; mz += -Math.sin(away) * e.strafeDir * 0.7;
-        const l = Math.hypot(mx, mz) || 1;
-        p.x += (mx / l) * speed * dt;
-        p.z += (mz / l) * speed * dt;
-        animatePerson(e.mesh, dt, speed);
-        // shooting
-        e.shootCd -= dt;
-        if (e.shootCd <= 0 && d < 36) {
-          e.shootCd = 1.05 + this.rng() * 1.1;
-          const hitChance = clamp(0.62 - d * 0.011, 0.16, 0.6);
-          this.spawnTracer({ x: p.x, z: p.z }, { x: ctx.playerPos.x, z: ctx.playerPos.z }, 0xff7a5e);
-          if (this.rng() < hitChance) ctx.onPlayerHit(5 + this.rng() * 6);
-          if (ctx.onEnemyShot) ctx.onEnemyShot(p);
+const pickupGeo = new THREE.BoxGeometry(0.5, 0.22, 0.34);
+const pickupMat = new THREE.MeshLambertMaterial({ color: 0xd9a441 });
+function dropAmmo(G, x, z) {
+  const m = new THREE.Mesh(pickupGeo, pickupMat);
+  m.position.set(x, 0.35, z); G.scene.add(m);
+  G.pickups.push({ mesh: m, x, z });
+}
+
+export function updateCombat(G, dt) {
+  const p = G.player;
+  p.attackCd = Math.max(0, p.attackCd - dt);
+  G.hurtT = Math.max(0, G.hurtT - dt);
+  if (G.reloading > 0) {
+    G.reloading -= dt;
+    if (G.reloading <= 0) {
+      const take = Math.min(12 - G.ammo.mag, G.ammo.reserve);
+      G.ammo.mag += take; G.ammo.reserve -= take;
+    }
+  }
+  // Tracers fade.
+  for (let i = G.tracers.length - 1; i >= 0; i--) {
+    const t = G.tracers[i];
+    t.life -= dt;
+    if (t.life <= 0) { G.scene.remove(t.line); t.line.geometry.dispose(); G.tracers.splice(i, 1); }
+  }
+  // Pickups.
+  for (let i = G.pickups.length - 1; i >= 0; i--) {
+    const pk = G.pickups[i];
+    pk.mesh.rotation.y += dt * 2.4;
+    if (G.mode === 'foot' && dist2d(p.x, p.z, pk.x, pk.z) < 1.5) {
+      G.ammo.reserve += 24; G.audio.pickup(); G.hud.toast('+24 pistol ammo');
+      G.scene.remove(pk.mesh); G.pickups.splice(i, 1);
+    }
+  }
+  // Enemies.
+  for (const e of G.enemies) {
+    if (e.dead) continue;
+    const d = dist2d(e.x, e.z, G.playerPos.x, G.playerPos.z);
+    if (e.state === 'idle' && d < 30) e.state = 'combat';
+    if (e.state !== 'combat') { e.h.group.position.set(e.x, 0.24, e.z); continue; }
+    e.yaw = angleLerp(e.yaw, yawToward(e.x, e.z, G.playerPos.x, G.playerPos.z), dt * 7);
+    let mvx = 0, mvz = 0;
+    if (d > 12) { mvx = Math.sin(e.yaw); mvz = Math.cos(e.yaw); }
+    else if (d < 6.5) { mvx = -Math.sin(e.yaw); mvz = -Math.cos(e.yaw); }
+    else { mvx = Math.cos(e.yaw) * e.strafe; mvz = -Math.sin(e.yaw) * e.strafe; if (rnd() < dt * 0.25) e.strafe *= -1; }
+    e.x += mvx * 2.6 * dt; e.z += mvz * 2.6 * dt;
+    e.phase += dt * 7;
+    animateHumanoid(e.h, e.phase, 1.1);
+    e.h.group.position.set(e.x, 0.24, e.z);
+    e.h.group.rotation.y = e.yaw;
+    e.barFg.parent.children.forEach((c) => { if (c.geometry === barBgGeo || c.geometry === barFgGeo) c.rotation.y = G.camYaw + Math.PI - e.yaw; });
+    // Shooting bursts.
+    e.burstCd -= dt;
+    if (e.burstCd <= 0 && d < 30 && !segmentBlocked(G, e.x, e.z, G.playerPos.x, G.playerPos.z)) {
+      e.burstLeft = 3; e.burstCd = rr(1.5, 2.7); e.shotCd = 0;
+    }
+    if (e.burstLeft > 0) {
+      e.shotCd -= dt;
+      if (e.shotCd <= 0) {
+        e.shotCd = 0.14; e.burstLeft--;
+        G.audio.shoot();
+        const hitChance = clamp(0.55 - d * 0.011, 0.12, 0.5) * (G.mode === 'car' ? 0.7 : 1);
+        const ex = e.x, ez = e.z;
+        let hx = G.playerPos.x, hz = G.playerPos.z;
+        const hit = rnd() < hitChance;
+        if (!hit) { hx += rr(-2.4, 2.4); hz += rr(-2.4, 2.4); }
+        tracer(G, ex, 1.35, ez, hx, 1.15, hz, 0xff9a5c);
+        if (hit) {
+          if (G.mode === 'car' && G.playerCar) { G.playerCar.damage = Math.min(1, G.playerCar.damage + 0.03); damagePlayer(G, 3); }
+          else damagePlayer(G, rr(4, 8));
         }
       }
     }
-    // tracers + muzzle flash decay
-    for (let i = this.tracers.length - 1; i >= 0; i--) {
-      const t = this.tracers[i];
-      t.life -= dt;
-      t.line.material.opacity = Math.max(0, t.life / 0.07) * 0.9;
-      if (t.life <= 0) { this.scene.remove(t.line); this.tracers.splice(i, 1); }
-    }
-    if (this.flashT > 0) { this.flashT -= dt; if (this.flashT <= 0) this.flash.material.opacity = 0; }
   }
 }
