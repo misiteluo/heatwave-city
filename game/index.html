@@ -3,17 +3,138 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Block Dodger</title>
+<link rel="icon" href="data:,">
+<title>HEATWAVE CITY — an open-world crime game</title>
 <style>
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #11141b; }
-  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
-  /* Read aloud, never shown: the status line screen readers announce. */
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #1a0f14; font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif; }
+  #app { position: fixed; inset: 0; }
+  #app canvas { display: block; }
+  .hidden { display: none !important; }
+
+  /* ---------- HUD ---------- */
+  #hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
+  #minimapWrap { position: absolute; top: 14px; left: 14px; width: 188px; height: 188px; border-radius: 10px; overflow: hidden;
+    border: 2px solid rgba(255,255,255,.55); box-shadow: 0 4px 18px rgba(0,0,0,.45); background: #20242c; }
+  #minimap { width: 188px; height: 188px; display: block; }
+  #wanted { position: absolute; top: 12px; right: 16px; font-size: 30px; letter-spacing: 3px; line-height: 1;
+    color: #ffd23e; text-shadow: 0 0 6px rgba(0,0,0,.8), 0 2px 2px rgba(0,0,0,.6); }
+  #wanted .off { color: rgba(255,255,255,.28); text-shadow: 0 0 4px rgba(0,0,0,.6); }
+  #wanted.flash { animation: wflash .5s steps(2) 4; }
+  @keyframes wflash { 50% { opacity: .25; } }
+  #objective { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); max-width: 560px; text-align: center;
+    background: linear-gradient(180deg, rgba(20,16,24,.82), rgba(20,16,24,.66)); border: 1px solid rgba(255,210,62,.55);
+    border-radius: 8px; padding: 7px 16px 8px; color: #fff; box-shadow: 0 4px 14px rgba(0,0,0,.35); }
+  #objective .objLabel { font-size: 10px; letter-spacing: 2.5px; color: #ffd23e; font-weight: 700; }
+  #objective .objText { font-size: 15px; font-weight: 600; margin-top: 1px; }
+  #objective .objDist { font-size: 12px; color: #ffd9a0; margin-left: 8px; font-weight: 700; }
+  #stats { position: absolute; left: 16px; bottom: 16px; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.8); }
+  #cash { font-size: 26px; font-weight: 800; color: #7dff8a; letter-spacing: .5px; }
+  #cash small { font-size: 12px; color: #cfe8cf; font-weight: 600; letter-spacing: 1.5px; display: block; }
+  #healthWrap { margin-top: 5px; width: 190px; height: 12px; background: rgba(0,0,0,.55); border: 1px solid rgba(255,255,255,.5); border-radius: 6px; overflow: hidden; }
+  #healthBar { height: 100%; width: 100%; background: linear-gradient(90deg, #ff5a4e, #ff9a3e); transition: width .15s; }
+  #armorLine { font-size: 12px; margin-top: 3px; color: #bfe3ff; font-weight: 700; letter-spacing: 1px; }
+  #speedo { position: absolute; right: 18px; bottom: 16px; text-align: right; color: #fff; text-shadow: 0 1px 4px rgba(0,0,0,.85); }
+  #speedo .num { font-size: 40px; font-weight: 800; line-height: .95; }
+  #speedo .unit { font-size: 12px; letter-spacing: 2px; color: #ffd9a0; font-weight: 700; }
+  #prompt { position: absolute; left: 50%; bottom: 108px; transform: translateX(-50%); background: rgba(15,12,18,.78);
+    border: 1px solid rgba(255,255,255,.35); color: #fff; padding: 6px 14px; border-radius: 20px; font-size: 14px; font-weight: 600; }
+  #prompt b { color: #ffd23e; background: rgba(255,210,62,.16); border: 1px solid rgba(255,210,62,.6); border-radius: 5px; padding: 0 7px; margin-right: 7px; }
+  #crosshair { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); color: rgba(255,255,255,.9);
+    font-size: 22px; text-shadow: 0 0 4px #000; }
+  #bustWrap { position: absolute; left: 50%; top: 58%; transform: translateX(-50%); width: 240px; text-align: center; color: #7db4ff;
+    font-weight: 800; letter-spacing: 2px; font-size: 13px; text-shadow: 0 1px 3px #000; }
+  #bustBarOuter { height: 9px; background: rgba(0,0,0,.6); border: 1px solid rgba(125,180,255,.7); border-radius: 5px; overflow: hidden; margin-top: 4px; }
+  #bustBar { height: 100%; width: 0%; background: #4e8dff; }
+  #vignette { position: absolute; inset: 0; pointer-events: none; opacity: 0;
+    background: radial-gradient(ellipse at center, transparent 52%, rgba(200,10,10,.55) 100%); }
+  #toast { position: absolute; left: 50%; top: 84px; transform: translateX(-50%); background: rgba(18,30,20,.88);
+    border: 1px solid rgba(125,255,138,.6); color: #eaffea; padding: 9px 20px; border-radius: 8px; font-size: 16px; font-weight: 700;
+    box-shadow: 0 6px 18px rgba(0,0,0,.4); opacity: 0; transition: opacity .3s; white-space: nowrap; }
+  #dialog { position: absolute; left: 50%; bottom: 168px; transform: translateX(-50%); max-width: 620px; background: rgba(12,10,16,.85);
+    border-left: 4px solid #ffd23e; color: #fff; padding: 10px 16px; border-radius: 6px; font-size: 15px; opacity: 0; transition: opacity .25s; }
+  #dialog b { color: #ffd23e; }
+
+  /* ---------- Overlays ---------- */
+  .overlay { position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center; flex-direction: column;
+    text-align: center; color: #fff; }
+  #menu { background: linear-gradient(180deg, rgba(30,8,20,.38) 0%, rgba(24,6,16,.72) 78%, rgba(16,4,12,.9) 100%); pointer-events: auto; }
+  #menu .kicker { letter-spacing: 6px; font-size: 13px; color: #ffd9a0; font-weight: 700; }
+  #menu h1 { margin: 4px 0 2px; font-size: 84px; font-weight: 900; letter-spacing: 2px; line-height: .95;
+    background: linear-gradient(180deg, #ffe259 15%, #ffa751 55%, #ff5e7a 100%); -webkit-background-clip: text; background-clip: text; color: transparent;
+    filter: drop-shadow(0 4px 0 rgba(90,10,40,.55)) drop-shadow(0 10px 26px rgba(0,0,0,.5)); font-style: italic; }
+  #menu .tagline { font-size: 17px; color: #ffe9d2; max-width: 620px; text-shadow: 0 2px 6px rgba(0,0,0,.7); margin: 6px 0 4px; }
+  #menu .story { font-size: 13.5px; color: rgba(255,240,220,.85); max-width: 600px; text-shadow: 0 1px 4px rgba(0,0,0,.8); }
+  .btnRow { margin-top: 22px; display: flex; gap: 14px; }
+  button { pointer-events: auto; cursor: pointer; font: inherit; font-weight: 800; letter-spacing: 1.5px; font-size: 16px;
+    color: #241114; background: linear-gradient(180deg, #ffd23e, #ff9a3e); border: none; border-radius: 8px; padding: 12px 30px;
+    box-shadow: 0 5px 0 #a34d12, 0 10px 22px rgba(0,0,0,.45); }
+  button:hover { filter: brightness(1.07); }
+  button:active { transform: translateY(3px); box-shadow: 0 2px 0 #a34d12; }
+  button.ghost { background: rgba(255,255,255,.12); color: #fff; box-shadow: 0 5px 0 rgba(0,0,0,.4); border: 1px solid rgba(255,255,255,.4); }
+  #controls { margin-top: 24px; font-size: 12.5px; color: rgba(255,255,255,.75); line-height: 1.75; text-shadow: 0 1px 3px rgba(0,0,0,.8); }
+  #controls b { color: #ffd23e; }
+  #pause, #endscreen { background: rgba(10,6,12,.72); pointer-events: auto; }
+  #endscreen h2 { font-size: 74px; margin: 0 0 6px; font-weight: 900; letter-spacing: 6px; font-style: italic; }
+  #endscreen.busted h2 { color: #7db4ff; text-shadow: 0 6px 30px rgba(40,90,255,.6); }
+  #endscreen.wasted h2 { color: #ff5147; text-shadow: 0 6px 30px rgba(255,30,20,.55); }
+  #endscreen.done h2 { color: #7dff8a; text-shadow: 0 6px 30px rgba(30,255,90,.45); font-size: 54px; letter-spacing: 2px; }
+  #endscreen p { font-size: 16px; color: #ffe9d2; margin: 2px 0 10px; text-shadow: 0 1px 4px #000; }
+  #pause h2 { font-size: 44px; letter-spacing: 5px; margin: 0 0 8px; }
   #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 </style>
 </head>
 <body>
-<canvas id="game" aria-label="Block Dodger: move the paddle left and right to dodge falling blocks and catch coins"></canvas>
+<div id="app" aria-label="HEATWAVE CITY game view"></div>
+
+<div id="hud" class="hidden">
+  <div id="minimapWrap"><canvas id="minimap" width="188" height="188"></canvas></div>
+  <div id="wanted"></div>
+  <div id="objective" class="hidden"><span class="objLabel">MISSION</span><div class="objText"><span id="objText"></span><span class="objDist" id="objDist"></span></div></div>
+  <div id="stats">
+    <div id="cash"><small>CASH</small>$0</div>
+    <div id="healthWrap"><div id="healthBar"></div></div>
+    <div id="armorLine"></div>
+  </div>
+  <div id="speedo" class="hidden"><div class="num" id="speedNum">0</div><div class="unit">MPH</div></div>
+  <div id="prompt" class="hidden"></div>
+  <div id="crosshair" class="hidden">+</div>
+  <div id="bustWrap" class="hidden">BUSTED<div id="bustBarOuter"><div id="bustBar"></div></div></div>
+  <div id="toast"></div>
+  <div id="dialog"></div>
+  <div id="vignette"></div>
+</div>
+
+<div id="menu" class="overlay">
+  <div class="kicker">WELCOME TO CALDERA BAY</div>
+  <h1>HEATWAVE CITY</h1>
+  <p class="tagline">One city. Five jobs. Every cop in the bay.</p>
+  <p class="story">You are <b>Jett Marlowe</b>, a wheelman fresh off the bus with empty pockets and a borrowed name.
+     Fixer <b>Mara Voss</b> has work: steal, run, fight and drive your way up from nobody to legend —
+     if the Caldera Bay PD doesn't put you in a cell first.</p>
+  <div class="btnRow">
+    <button id="btnNew">NEW GAME</button>
+    <button id="btnContinue" class="ghost">CONTINUE</button>
+  </div>
+  <div id="controls">
+    <b>WASD</b> move / drive &nbsp;·&nbsp; <b>Shift</b> sprint &nbsp;·&nbsp; <b>E</b> enter / steal car &nbsp;·&nbsp; <b>Mouse drag</b> camera<br>
+    <b>Click / F</b> punch or shoot &nbsp;·&nbsp; <b>Space</b> handbrake &nbsp;·&nbsp; <b>P</b> pause &nbsp;·&nbsp; <b>M</b> mute &nbsp;·&nbsp; Steal cars, finish Mara's jobs, lose the heat.
+  </div>
+</div>
+
+<div id="pause" class="overlay hidden">
+  <h2>PAUSED</h2>
+  <p id="pauseStats"></p>
+  <div class="btnRow"><button id="btnResume">RESUME</button><button id="btnQuit" class="ghost">TITLE SCREEN</button></div>
+</div>
+
+<div id="endscreen" class="overlay hidden">
+  <h2 id="endTitle">WASTED</h2>
+  <p id="endText"></p>
+  <div class="btnRow"><button id="btnRespawn">RESPAWN</button></div>
+</div>
+
 <p id="status" role="status" aria-live="polite"></p>
+<script src="./vendor/three.min.js"></script>
 <script type="module" src="./src/main.js"></script>
 </body>
 </html>

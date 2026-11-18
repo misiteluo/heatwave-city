@@ -1,79 +1,97 @@
-// The screenshot scenes behind ?shot=start|play|end. Each one plays the real rules forward from a
-// fresh world for a fixed number of steps, steered by a simple autopilot (look ahead each way the
-// paddle could move, keep clear of blocks, chase the lowest coin when that is safe), so the frame
-// is what a short game really looks like and the same seed always gives the same frame.
-import { FIELD, PLAYER, STEP } from './config.js';
-import { EVENT_OVER, KIND_BLOCK } from './world.js';
-import { SCREEN_OVER, SCREEN_PLAY, SCREEN_TITLE } from './render.js';
+// HEATWAVE CITY — staged screenshot scenes. Each ?shot=<name> load arranges a
+// real, playable moment (no compositing): the cover chase downtown, a street
+// corner on foot, a beach fight mid-mission, and a highway run at a roadblock.
+// An autopilot drives/walks for a few seconds, then window.__shotReady flips.
 
-const START_SECONDS = 5;
-const PLAY_SECONDS = 26;
-const END_LIMIT_SECONDS = 600;
-/**
- * How far ahead, in seconds, the autopilot checks each way it could move: the play scene's pilot
- * looks well ahead and keeps all its lives; the end scene's looks only a moment ahead, so it is
- * caught out once the blocks speed up, as a hurried player is.
- */
-const HORIZON_PLAY = 0.7;
-const HORIZON_END = 0.25;
-const SAMPLE = 1 / 30;
-const DIRECTIONS = [0, -1, 1];
-/** Extra room, each side, it keeps between the paddle and a block. */
-const MARGIN = 10;
+import { clamp, angleDiff } from './config.js';
+import { placeCar } from './vehicles.js';
 
-/** Seconds until moving in `direction` (-1, 0, 1) runs the paddle into a block; Infinity when it never does. */
-function timeToHit(state, direction, horizon) {
-  const player = state.player;
-  for (let t = SAMPLE; t <= horizon; t += SAMPLE) {
-    const x = Math.min(FIELD.width - player.width, Math.max(0, player.x + direction * PLAYER.speed * t));
-    for (let index = 0; index < state.items.length; index += 1) {
-      const item = state.items[index];
-      if (!item.active || item.kind !== KIND_BLOCK) continue;
-      const y = item.y + item.speed * t;
-      if (y + item.height > player.y && y < player.y + player.height && item.x < x + player.width + MARGIN && item.x + item.width > x - MARGIN) return t;
-    }
-  }
-  return Infinity;
+function driveInput(car, tx, tz, topSpeed) {
+  const p = car.mesh.position;
+  const desired = Math.atan2(tx - p.x, tz - p.z);
+  const steer = clamp(angleDiff(car.heading, desired) * 2.4, -1, 1);
+  let throttle = 0;
+  if (car.speed < topSpeed) throttle = 1;
+  else if (car.speed > topSpeed + 2) throttle = -0.4;
+  return { z: 0, x: 0, sprint: false, throttle, steer, handbrake: false, lookDX: 0, lookDY: 0, looking: false };
 }
 
-/** Of the safe ways to move, the one toward the lowest coin (or the centre); else the one that is hit last. */
-function autopilot(state, horizon) {
-  const player = state.player;
-  let coin = null;
-  for (let index = 0; index < state.items.length; index += 1) {
-    const item = state.items[index];
-    if (item.active && item.kind !== KIND_BLOCK && (coin === null || item.y > coin.y)) coin = item;
-  }
-  const target = coin === null ? FIELD.width / 2 : coin.x + coin.width / 2;
-  const centre = player.x + player.width / 2;
-  const wanted = target > centre + 8 ? 1 : target < centre - 8 ? -1 : 0;
-  let best = wanted;
-  let bestTime = timeToHit(state, wanted, horizon);
-  for (let index = 0; index < DIRECTIONS.length && bestTime !== Infinity; index += 1) {
-    const time = timeToHit(state, DIRECTIONS[index], horizon);
-    if (time > bestTime) {
-      bestTime = time;
-      best = DIRECTIONS[index];
+const IDLE = { z: 0, x: 0, sprint: false, throttle: 0, steer: 0, handbrake: false, lookDX: 0, lookDY: 0, looking: false };
+
+export function createShotDirector(name, ctx) {
+  const { player, traffic, police, runner, state } = ctx;
+  let elapsed = 0;
+  let setUp = false;
+  let readyAt = 3;
+  let drive = null; // {car, tx, tz, speed} for car scenes
+
+  function setup() {
+    if (name === 'cover') {
+      ctx.startMission(0);
+      const car = traffic.cars[0];
+      placeCar(car, 30, 128, Math.PI);
+      player.enterCar(car);
+      ctx.setWantedAtLeast(3);
+      const c1 = police.spawnCop(car.mesh.position); placeCar(c1, 23, 152, Math.PI);
+      const c2 = police.spawnCop(car.mesh.position); placeCar(c2, 38, 160, Math.PI);
+      // a third cruiser ahead, swinging in off the cross street — visible in frame
+      const c3 = police.spawnCop(car.mesh.position); placeCar(c3, 20, 44, Math.PI * 0.82);
+      // traffic ahead in the same street so the road feels alive (northbound lane x=34)
+      const t1 = traffic.cars[1];
+      placeCar(t1, 34, 64, Math.PI);
+      t1.navDir = { x: 0, z: -1 }; traffic.pickNext(t1, 30, 30);
+      const t2 = traffic.cars[2];
+      placeCar(t2, 34, -34, Math.PI);
+      t2.navDir = { x: 0, z: -1 }; traffic.pickNext(t2, 30, -30);
+      drive = { car, tx: 30, tz: -500, speed: 17 };
+      readyAt = 3.4;
+    } else if (name === 'foot') {
+      ctx.startMission(0);
+      player.teleport(41, 109, -2.05);
+      player.camYaw = -2.05; player.camPitch = 0.3;
+      // dress the corner: a few pedestrians near the player
+      const spots = [[36, 100], [44, 96], [31, 106], [47, 112]];
+      ctx.peds.peds.slice(0, 4).forEach((ped, i) => ped.mesh.position.set(spots[i][0], 0, spots[i][1]));
+      // traffic crossing the intersection in front of the player
+      const x1 = traffic.cars[3];
+      placeCar(x1, 2, 94, Math.PI / 2);
+      x1.navDir = { x: 1, z: 0 }; traffic.pickNext(x1, 30, 90);
+      const x2 = traffic.cars[4];
+      placeCar(x2, 74, 86, -Math.PI / 2);
+      x2.navDir = { x: -1, z: 0 }; traffic.pickNext(x2, 30, 90);
+      // a parked car on the far kerb, in front of the shopfronts
+      placeCar(traffic.parked[0], 55, 95.5, Math.PI / 2);
+      readyAt = 2.1;
+    } else if (name === 'mission') {
+      state.hasGun = true; state.ammo = 30;
+      runner.index = 2; runner.stepIndex = 1; runner.active = true; runner.done = false;
+      runner.beginStep(); // spawns the Solano crew fight at the beach
+      player.teleport(55, 299, 0.59);
+      player.camYaw = 0.59; player.camPitch = 0.3;
+      readyAt = 1.7;
+    } else if (name === 'chase') {
+      ctx.startMission(3);
+      const car = traffic.cars[1];
+      placeCar(car, -150, 270, Math.PI / 2);
+      car.speed = 19;
+      player.enterCar(car);
+      ctx.setWantedAtLeast(4);
+      const c1 = police.spawnCop(car.mesh.position); placeCar(c1, -169, 264, Math.PI / 2);
+      const c2 = police.spawnCop(car.mesh.position); placeCar(c2, -174, 277, Math.PI / 2);
+      police.setRoadblock({ x: -150, z: 270 }, Math.PI / 2);
+      drive = { car, tx: 600, tz: 270, speed: 23 };
+      readyAt = 2.9;
     }
   }
-  return best;
-}
 
-/**
- * Set `world` to the named scene (start, play or end; any other name is start) and return the
- * screen to draw over it and the best score to show.
- */
-export function stageShot(name, world) {
-  world.reset();
-  if (name !== 'play' && name !== 'end') {
-    for (let index = 0; index < START_SECONDS / STEP; index += 1) world.step(STEP, 0, true);
-    return { screen: SCREEN_TITLE, best: 0 };
-  }
-  const limit = name === 'end' ? END_LIMIT_SECONDS : PLAY_SECONDS;
-  const horizon = name === 'end' ? HORIZON_END : HORIZON_PLAY;
-  for (let index = 0; index < limit / STEP; index += 1) {
-    if (world.step(STEP, autopilot(world.state, horizon), false) & EVENT_OVER) break;
-  }
-  const over = world.state.lives === 0;
-  return { screen: over ? SCREEN_OVER : SCREEN_PLAY, best: world.state.score };
+  return {
+    update(dt) {
+      if (!setUp) { setUp = true; setup(); }
+      elapsed += dt;
+      if (elapsed >= readyAt && !window.__shotReady) window.__shotReady = true;
+      if (drive) return driveInput(drive.car, drive.tx, drive.tz, drive.speed);
+      if (name === 'foot') return { ...IDLE, z: 1 }; // stroll toward the intersection
+      return IDLE;
+    },
+  };
 }
