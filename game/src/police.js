@@ -12,205 +12,187 @@ export class Police {
   constructor(scene, city) {
     this.scene = scene;
     this.city = city;
+    this.wanted = 0;
     this.cars = [];
     this.blocks = [];
     this.heli = null;
-    this.wanted = 0;
-    this.unseenTimer = 0;
-    this.spawnTimer = 0;
+    this.hiddenTimer = 0;
     this.bustTimer = 0;
-    this.blockTimer = 0;
+    this.spawnTimer = 0;
+    this.blockCd = 0;
     this.onBusted = null;
-    // spotlight rig for the heli
-    this.spot = new THREE.SpotLight(0xfff2c0, 0, 90, 0.42, 0.5, 0.6);
-    this.spot.position.set(0, -100, 0);
-    scene.add(this.spot);
-    scene.add(this.spot.target);
-    const coneGeo = new THREE.ConeGeometry(9, 30, 14, 1, true);
-    this.spotCone = new THREE.Mesh(coneGeo, new THREE.MeshBasicMaterial({
-      color: 0xfff2a8, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false,
-    }));
-    scene.add(this.spotCone);
+    this.lastTX = 0; this.lastTZ = 0;
+    this.velX = 0; this.velZ = 0;
   }
 
   setWanted(n) {
-    this.wanted = clamp(Math.round(n), 0, 5);
-    if (this.wanted === 0) {
-      for (const c of this.cars) c.remove();
-      for (const c of this.blocks) c.remove();
-      this.cars = []; this.blocks = [];
-      this.bustTimer = 0;
-      if (this.heli) { this.heli.remove(); this.heli = null; }
-      this.spot.intensity = 0;
-      this.spotCone.material.opacity = 0;
-    }
+    const next = clamp(Math.round(n), 0, 5);
+    if (next > this.wanted) this.hiddenTimer = 0;
+    this.wanted = next;
   }
 
-  addWanted(n) {
-    this.setWanted(this.wanted + n);
-    this.unseenTimer = 0;
-  }
+  addWanted(n) { this.setWanted(this.wanted + n); }
 
   targetCount() { return [0, 2, 3, 5, 6, 8][this.wanted] || 0; }
 
   spawnOne(world) {
-    const px = world.playerCar ? world.playerCar.x : world.player.x;
-    const pz = world.playerCar ? world.playerCar.z : world.player.z;
-    let x, z;
-    if (pz > HALF - 10) {
-      // player is on the causeway or Gull Island: come down the causeway
-      x = (Math.random() < 0.5 ? -3.4 : 3.4);
-      z = Math.max(HALF + 6, pz - 95);
-    } else {
-      const side = Math.floor(Math.random() * 4);
-      x = px; z = pz;
-      if (side === 0) { x = px - 100; z = pz + (Math.random() - 0.5) * 56; }
-      if (side === 1) { x = px + 100; z = pz + (Math.random() - 0.5) * 56; }
-      if (side === 2) { z = pz - 100; x = px + (Math.random() - 0.5) * 56; }
-      if (side === 3) { z = pz + 100; x = px + (Math.random() - 0.5) * 56; }
-      x = clamp(x, -HALF - 12, HALF + 12); z = clamp(z, -HALF - 12, HALF + 12);
-      const snap = (v) => {
-        let best = this.city.roadsX[0], bd = 1e9;
-        for (const l of this.city.roadsX) { const d = Math.abs(l - v); if (d < bd) { bd = d; best = l; } }
-        return best;
-      };
-      if (side < 2) x = snap(x); else z = snap(z);
+    const target = world.playerCar || world.player;
+    for (let tries = 0; tries < 8; tries++) {
+      const vertical = Math.random() < 0.5;
+      const li = Math.floor(Math.random() * 13);
+      const line = -HALF + li * 46;
+      const along = -HALF + Math.random() * HALF * 2;
+      const x = vertical ? line : along;
+      const z = vertical ? along : line;
+      const d = dist2d(x, z, target.x, target.z);
+      if (d < 48 || d > 150) continue;
+      const car = new Car(this.scene, 'police', 0xf4f6f8, x, z, Math.random() * Math.PI * 2, { police: true });
+      this.cars.push(car);
+      return car;
     }
-    const car = new Car(this.scene, 'police', 0x1c2733, x, z, Math.atan2(px - x, pz - z));
-    car.occupied = true;
-    this.cars.push(car);
+    return null;
   }
 
   spawnRoadblock(world) {
-    const px = world.playerCar ? world.playerCar.x : world.player.x;
-    const pz = world.playerCar ? world.playerCar.z : world.player.z;
+    const target = world.playerCar || world.player;
     const heading = world.playerCar ? world.playerCar.heading : world.player.heading;
-    const bx = px + Math.sin(heading) * 58;
-    const bz = pz + Math.cos(heading) * 58;
+    const fx = Math.sin(heading), fz = Math.cos(heading);
+    const bx = target.x + fx * 58, bz = target.z + fz * 58;
     if (!this.city.isLand(bx, bz)) return;
+    const perp = heading + Math.PI / 2;
     for (let i = -1; i <= 1; i++) {
-      const car = new Car(this.scene, 'police', 0x1c2733,
-        bx + Math.cos(heading) * i * 4.8, bz - Math.sin(heading) * i * 4.8,
-        heading + Math.PI / 2);
-      car.occupied = true;
+      const x = bx + Math.sin(perp) * i * 5.2;
+      const z = bz + Math.cos(perp) * i * 5.2;
+      if (!this.city.isLand(x, z)) continue;
+      const car = new Car(this.scene, 'police', 0xf4f6f8, x, z, perp, { police: true });
+      car.ai = null;
       this.blocks.push(car);
     }
+    this.blockCd = 26;
   }
 
   updateHeli(dt, world, t) {
-    if (this.wanted >= 3 && !this.heli) {
-      const px = world.player.x, pz = world.player.z;
-      this.heli = new Helicopter(this.scene, 0x1c2733, px + 60, pz - 60, { police: true, heading: 0 });
-      this.heli.occupied = true;
+    const target = world.playerCar || world.player;
+    if (this.wanted >= 3) {
+      if (!this.heli) {
+        this.heli = new Helicopter(this.scene, 0x2456c8, target.x + 60, target.z - 60, { police: true, heading: 0 });
+        this.heli.alt = 20;
+      }
+      this.heli.aiMove(dt, target.x + this.velX * 0.5, target.z + this.velZ * 0.5, 15 + Math.sin(t * 0.4) * 2, this.city);
+    } else if (this.heli) {
+      this.heli.aiMove(dt, this.heli.x + 300, this.heli.z - 300, 26, this.city);
+      if (dist2d(this.heli.x, this.heli.z, target.x, target.z) > 260) {
+        this.heli.remove();
+        this.heli = null;
+      }
     }
-    if (!this.heli) return;
-    const h = this.heli;
-    if (this.wanted < 3) { h.remove(); this.heli = null; this.spot.intensity = 0; this.spotCone.material.opacity = 0; return; }
-    const tx = world.playerCar ? world.playerCar.x : world.player.x;
-    const tz = world.playerCar ? world.playerCar.z : world.player.z;
-    // hover pursuit: circle the player at altitude, nose into the orbit
-    const orbitA = t * 0.35;
-    const gx = tx + Math.cos(orbitA) * 16, gz = tz + Math.sin(orbitA) * 16;
-    const dx = gx - h.x, dz = gz - h.z;
-    const d = Math.hypot(dx, dz) || 1;
-    const wantHeading = Math.atan2(dx, dz);
-    h.heading += angleDelta(h.heading, wantHeading) * Math.min(1, dt * 1.6);
-    const spd = clamp(d * 0.7, 0, 26);
-    h.x += Math.sin(h.heading) * spd * dt;
-    h.z += Math.cos(h.heading) * spd * dt;
-    h.alt += (26 - h.alt) * Math.min(1, dt * 0.8);
-    h.rotorSpin = 42;
-    h.mesh.userData.rotor.rotation.y += 42 * dt;
-    h.mesh.userData.tailRotor.rotation.x += 58 * dt;
-    const floor = this.city.heightAt(h.x, h.z);
-    h.mesh.position.set(h.x, floor + h.alt, h.z);
-    h.mesh.rotation.y = h.heading;
-    h.mesh.rotation.x = clamp(spd * 0.008, 0, 0.2);
-    // spotlight on the player
-    this.spot.position.set(h.x, floor + h.alt - 1, h.z);
-    this.spot.target.position.set(tx, 0, tz);
-    this.spot.intensity = 1.6;
-    this.spotCone.position.set((h.x + tx) / 2, (floor + h.alt) / 2, (h.z + tz) / 2);
-    this.spotCone.material.opacity = 0.13;
-    this.heliSees = dist2d(h.x, h.z, tx, tz) < 55;
   }
 
   update(dt, world, t) {
-    this.updateHeli(dt, world, t);
-    if (this.wanted <= 0) { this.bustTimer = 0; return; }
+    const target = world.playerCar || world.playerHeli || world.player;
+    // target velocity estimate (for pursuit prediction + heli lead)
+    if (dt > 0) {
+      this.velX = (target.x - this.lastTX) / dt;
+      this.velZ = (target.z - this.lastTZ) / dt;
+      const m = Math.hypot(this.velX, this.velZ);
+      if (m > 60) { this.velX *= 60 / m; this.velZ *= 60 / m; }
+    }
+    this.lastTX = target.x; this.lastTZ = target.z;
+
+    if (this.wanted <= 0) {
+      // stand down: cruisers leave, blocks clear
+      for (const car of this.cars) car.remove();
+      for (const car of this.blocks) car.remove();
+      this.cars = []; this.blocks = [];
+      if (this.heli) this.updateHeli(dt, world, t);
+      this.bustTimer = 0;
+      world.hud.setBustProgress(0);
+      return;
+    }
+
+    // who can see the player?
+    let seen = false;
+    for (const car of this.cars) {
+      if (!car.dead && dist2d(car.x, car.z, target.x, target.z) < 58) { seen = true; break; }
+    }
+    if (!seen && this.heli && dist2d(this.heli.x, this.heli.z, target.x, target.z) < 78) seen = true;
+    if (seen) this.hiddenTimer = 0;
+    else {
+      this.hiddenTimer += dt;
+      if (this.hiddenTimer > WANTED_DECAY_SECONDS) {
+        this.hiddenTimer = 0;
+        this.setWanted(this.wanted - 1);
+        if (this.wanted > 0) world.hud.toast('The heat cools — ' + this.wanted + ' star' + (this.wanted > 1 ? 's' : ''));
+        else world.hud.toast('You lost the heat');
+      }
+    }
+
+    // maintain cruiser strength
     this.spawnTimer -= dt;
-    if (this.cars.length < this.targetCount() && this.spawnTimer <= 0) {
-      this.spawnTimer = 1.3;
+    const alive = this.cars.filter((c) => !c.dead).length;
+    if (alive < this.targetCount() && this.spawnTimer <= 0) {
+      this.spawnTimer = 1.6;
       this.spawnOne(world);
     }
-    if (this.wanted >= 4) {
-      this.blockTimer -= dt;
-      if (this.blockTimer <= 0 && this.blocks.length === 0) {
-        this.blockTimer = 30;
-        this.spawnRoadblock(world);
-      }
-    } else if (this.blocks.length) {
-      for (const c of this.blocks) c.remove();
+    // recycle distant or long-dead cruisers
+    this.cars = this.cars.filter((car) => {
+      if (dist2d(car.x, car.z, target.x, target.z) > 430) { car.remove(); return false; }
+      return true;
+    });
+
+    // pursuit driving
+    const px = target.x + this.velX * 0.42;
+    const pz = target.z + this.velZ * 0.42;
+    for (const car of this.cars) {
+      car.flashLights(t);
+      if (car.dead || car.occupied) continue;
+      const d = dist2d(car.x, car.z, px, pz);
+      const want = Math.atan2(px - car.x, pz - car.z);
+      const dh = angleDelta(car.heading, want);
+      const input = { throttle: 1, steer: clamp(dh * 2.1, -1, 1), handbrake: Math.abs(dh) > 1.9 && d < 16 };
+      if (Math.abs(dh) > 2.5 && d < 9) input.throttle = -1;
+      if (d < 3.4) input.throttle = 0.2;
+      car.drive(dt, input, this.city);
+    }
+
+    // roadblocks at four stars
+    this.blockCd -= dt;
+    if (this.wanted >= 4 && this.blocks.length === 0 && this.blockCd <= 0 && world.playerCar) {
+      this.spawnRoadblock(world);
+    }
+    for (const car of this.blocks) car.flashLights(t);
+    if (this.blocks.length && (this.wanted < 4 || dist2d(this.blocks[0].x, this.blocks[0].z, target.x, target.z) > 150)) {
+      for (const car of this.blocks) car.remove();
       this.blocks = [];
     }
 
-    const inCar = !!world.playerCar;
-    const tx = inCar ? world.playerCar.x : world.player.x;
-    const tz = inCar ? world.playerCar.z : world.player.z;
-    let anySees = !!this.heliSees && !!this.heli;
-    for (let i = this.cars.length - 1; i >= 0; i--) {
-      const car = this.cars[i];
-      if (car.dead) { car.speed = 0; continue; }
-      const d = dist2d(car.x, car.z, tx, tz);
-      if (d < 75) anySees = true;
-      if (d > 340) { car.remove(); this.cars.splice(i, 1); continue; }
-      // predict where the target is going and drive at that point
-      let ax = tx, az = tz;
-      if (inCar) {
-        ax += Math.sin(world.playerCar.heading) * world.playerCar.speed * 0.45;
-        az += Math.cos(world.playerCar.heading) * world.playerCar.speed * 0.45;
-      }
-      const wantHeading = Math.atan2(ax - car.x, az - car.z);
-      const delta = angleDelta(car.heading, wantHeading);
-      const input = { throttle: 0, steer: clamp(delta * 1.6, -1, 1), handbrake: false };
-      const cruise = inCar ? 34 : 19;
-      if (d > 7.5) input.throttle = car.speed < cruise ? 0.95 : 0;
-      else if (inCar) input.throttle = Math.abs(world.playerCar.speed) > 3 ? 0.5 : 0;
-      else input.throttle = car.speed > 2 ? -0.5 : 0;
-      if (Math.abs(delta) > 2.4 && d < 16) input.throttle = -0.7;
-      car.drive(dt, input, this.city);
-      car.flashLights(t);
-    }
-    for (const b of this.blocks) b.flashLights(t);
+    this.updateHeli(dt, world, t);
 
-    if (anySees) this.unseenTimer = 0;
-    else {
-      this.unseenTimer += dt;
-      if (this.unseenTimer >= WANTED_DECAY_SECONDS) {
-        this.unseenTimer = 0;
-        this.setWanted(this.wanted - 1);
-        if (world.hud) world.hud.toast('You lost the heat — one star gone');
+    // bust logic: pinned and surrounded, or cornered on foot
+    let pinned = false;
+    if (!world.playerHeli) {
+      const speed = world.playerCar ? Math.abs(world.playerCar.speed) : 0;
+      if (world.playerCar && speed < 2.6) {
+        let near = 0;
+        for (const car of this.cars) if (!car.dead && dist2d(car.x, car.z, target.x, target.z) < 9) near++;
+        pinned = near >= 2;
+      } else if (!world.playerCar) {
+        for (const car of this.cars) {
+          if (!car.dead && dist2d(car.x, car.z, target.x, target.z) < BUSTED_RADIUS + 1.2) { pinned = true; break; }
+        }
       }
     }
-
-    // bust: pinned on foot by a close slow cruiser, or boxed in a stopped car
-    let busting = false;
-    if (!inCar) {
-      for (const car of this.cars) {
-        if (dist2d(car.x, car.z, tx, tz) < BUSTED_RADIUS + 1.8 && Math.abs(car.speed) < 6) busting = true;
-      }
-    } else if (Math.abs(world.playerCar.speed) < 1.6) {
-      let near = 0;
-      for (const car of this.cars) if (dist2d(car.x, car.z, tx, tz) < 8) near++;
-      if (near >= 2) busting = true;
-    }
-    if (busting) {
+    if (pinned) {
       this.bustTimer += dt;
-      if (world.hud) world.hud.setBustProgress(this.bustTimer / BUSTED_SECONDS);
-      if (this.bustTimer >= BUSTED_SECONDS && this.onBusted) this.onBusted();
+      world.hud.setBustProgress(this.bustTimer / BUSTED_SECONDS);
+      if (this.bustTimer >= BUSTED_SECONDS && this.onBusted) {
+        this.bustTimer = 0;
+        world.hud.setBustProgress(0);
+        this.onBusted();
+      }
     } else {
       this.bustTimer = Math.max(0, this.bustTimer - dt * 1.6);
-      if (world.hud) world.hud.setBustProgress(this.bustTimer / BUSTED_SECONDS);
+      world.hud.setBustProgress(this.bustTimer / BUSTED_SECONDS);
     }
   }
 }

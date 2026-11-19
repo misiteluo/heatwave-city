@@ -1,10 +1,11 @@
 // pedestrians.js — the citizens of Heatwave City. Most stroll a loop
 // around their home block at kerb distance; a few walk the beachfront
-// promenade end to end. All of them sprint away from gunfire, crashes
-// and flying fists, and they count as witnesses for the crime system.
+// promenade or the boardwalk end to end, and a handful live out on the
+// islands. All of them sprint away from gunfire, crashes and flying
+// fists, and they count as witnesses for the crime system.
 
 import { buildHumanoid, animateHumanoid } from './player.js';
-import { BLOCK, HALF, SKIN_TONES, SHIRT_COLORS, blockCentre, clamp, dist2d, makeRng } from './config.js';
+import { BLOCK, ISLAND, SKIN_TONES, SHIRT_COLORS, blockCentre, clamp, dist2d, makeRng } from './config.js';
 
 const PANTS = [0x2b2d42, 0x6c5849, 0x274156, 0x772e25, 0x3d405b];
 
@@ -14,82 +15,90 @@ export class Pedestrians {
     this.rng = makeRng(seed * 97 + 3);
     this.peds = [];
     const rng = this.rng;
-    const spawn = (x, z, mode, data) => {
+    const addPed = (x, z, waypoints, speed) => {
       const mesh = buildHumanoid(
         SHIRT_COLORS[Math.floor(rng() * SHIRT_COLORS.length)],
         PANTS[Math.floor(rng() * PANTS.length)],
         SKIN_TONES[Math.floor(rng() * SKIN_TONES.length)],
-        { capColor: [0xe63946, 0x118ab2, 0xffd23f, 0x06d6a0][Math.floor(rng() * 4)] });
+        { capColor: 0x555f6e },
+      );
+      mesh.position.set(x, 0, z);
       scene.add(mesh);
-      this.peds.push(Object.assign({
-        mesh, x, z, mode, phase: rng() * 6, flee: 0, fleeX: 0, fleeZ: 0, speed: 1.6 + rng() * 1.1,
-      }, data));
+      this.peds.push({
+        mesh, x, z, heading: rng() * Math.PI * 2, phase: rng() * 6,
+        waypoints, wi: Math.floor(rng() * waypoints.length),
+        speed: speed || (1.1 + rng() * 0.9), flee: 0, fleeX: 0, fleeZ: 0,
+      });
     };
-    for (let i = 0; i < 40; i++) {
-      const gx = Math.floor(rng() * 12), gz = Math.floor(rng() * 12);
-      spawn(blockCentre(gx), blockCentre(gz), 'loop', {
-        cx: blockCentre(gx), cz: blockCentre(gz),
-        angle: rng() * Math.PI * 2,
-        radius: BLOCK / 2 + 2.6 + rng() * 1.6,
-        dir: rng() < 0.5 ? 1 : -1,
-        angSpeed: 0.1 + rng() * 0.09,
-      });
+    // block-loop strollers
+    for (let i = 0; i < 34; i++) {
+      const bi = Math.floor(rng() * 12), bj = Math.floor(rng() * 12);
+      const cx = blockCentre(bi), cz = blockCentre(bj);
+      const o = BLOCK / 2 + 3.6;
+      const wps = [
+        [cx - o, cz - o], [cx + o, cz - o], [cx + o, cz + o], [cx - o, cz + o],
+      ];
+      if (rng() < 0.5) wps.reverse();
+      addPed(wps[0][0], wps[0][1], wps);
     }
-    for (let i = 0; i < 8; i++) { // promenade walkers
-      spawn(-HALF + rng() * HALF * 2, 296 + rng() * 8, 'prom', {
-        dir: rng() < 0.5 ? 1 : -1, zLane: 294 + rng() * 10,
-      });
+    // beachfront promenade walkers
+    for (let i = 0; i < 6; i++) {
+      const z = 296 + rng() * 10;
+      addPed(-240 + rng() * 480, z, [[-268, z], [268, z]]);
     }
-    for (let i = 0; i < 3; i++) { // island wanderers
-      spawn((rng() - 0.5) * 40, 478 + (rng() - 0.5) * 40, 'loop', {
-        cx: 0, cz: 478, angle: rng() * Math.PI * 2, radius: 16 + rng() * 14,
-        dir: 1, angSpeed: 0.08,
-      });
+    // boardwalk walkers (east strip)
+    for (let i = 0; i < 4; i++) {
+      const x = 300 + rng() * 8;
+      addPed(x, -240 + rng() * 480, [[x, -268], [x, 268]]);
+    }
+    // islanders
+    for (let i = 0; i < 4; i++) {
+      const a = rng() * Math.PI * 2;
+      const x = ISLAND.x + Math.cos(a) * 26, z = ISLAND.z + Math.sin(a) * 26;
+      addPed(x, z, [[ISLAND.x - 24, ISLAND.z + 10], [ISLAND.x + 20, ISLAND.z - 14], [ISLAND.x + 4, ISLAND.z + 26]]);
     }
   }
 
   scare(x, z, radius = 16) {
     for (const p of this.peds) {
-      if (dist2d(p.x, p.z, x, z) < radius) {
-        p.flee = 2.8;
+      const d = dist2d(p.x, p.z, x, z);
+      if (d < radius) {
+        p.flee = 2.6;
         const dx = p.x - x, dz = p.z - z;
-        const d = Math.hypot(dx, dz) || 1;
-        p.fleeX = dx / d; p.fleeZ = dz / d;
+        const m = Math.hypot(dx, dz) || 1;
+        p.fleeX = dx / m; p.fleeZ = dz / m;
       }
     }
   }
 
   update(dt, city) {
     for (const p of this.peds) {
-      let moving = 0;
+      let mx = 0, mz = 0, speed = p.speed;
       if (p.flee > 0) {
         p.flee -= dt;
-        const nx = p.x + p.fleeX * 9.5 * dt, nz = p.z + p.fleeZ * 9.5 * dt;
-        if (city.isLand(nx, nz)) { p.x = nx; p.z = nz; }
-        p.mesh.rotation.y = Math.atan2(p.fleeX, p.fleeZ);
-        p.phase += dt * 13;
-        moving = 1;
-      } else if (p.mode === 'loop') {
-        p.angle += p.angSpeed * p.dir * dt;
-        p.x = p.cx + Math.cos(p.angle) * p.radius;
-        p.z = p.cz + Math.sin(p.angle) * p.radius;
-        p.mesh.rotation.y = Math.atan2(-Math.sin(p.angle) * p.dir, Math.cos(p.angle) * p.dir) + (p.dir > 0 ? 0 : Math.PI);
-        p.phase += dt * 7.5;
-        moving = 1;
-      } else { // promenade
-        p.x += p.dir * p.speed * dt;
-        p.z = p.zLane;
-        if (p.x > HALF + 20) p.dir = -1;
-        if (p.x < -HALF - 20) p.dir = 1;
-        p.mesh.rotation.y = Math.atan2(p.dir, 0);
-        p.phase += dt * 7.5;
-        moving = 1;
+        mx = p.fleeX; mz = p.fleeZ; speed = 6.4;
+      } else {
+        const [tx, tz] = p.waypoints[p.wi];
+        const dx = tx - p.x, dz = tz - p.z;
+        const d = Math.hypot(dx, dz);
+        if (d < 1.4) { p.wi = (p.wi + 1) % p.waypoints.length; continue; }
+        mx = dx / d; mz = dz / d;
       }
+      const want = Math.atan2(mx, mz);
+      let dh = want - p.heading;
+      while (dh > Math.PI) dh -= Math.PI * 2;
+      while (dh < -Math.PI) dh += Math.PI * 2;
+      p.heading += clamp(dh, -6 * dt, 6 * dt);
+      const nx = p.x + mx * speed * dt;
+      const nz = p.z + mz * speed * dt;
+      if (city.isLand(nx, nz)) { p.x = nx; p.z = nz; }
       const probe = { x: p.x, z: p.z };
-      if (city) city.collide(probe, 0.55);
+      city.collide(probe, 0.5);
       p.x = probe.x; p.z = probe.z;
-      p.mesh.position.set(p.x, Math.abs(Math.sin(p.phase)) * 0.05, p.z);
-      animateHumanoid(p.mesh, p.phase, moving ? 0.55 : 0);
+      p.phase += dt * speed * 2.1;
+      animateHumanoid(p.mesh, p.phase, p.flee > 0 ? 0.95 : 0.6);
+      p.mesh.position.set(p.x, city.groundY(p.x, p.z), p.z);
+      p.mesh.rotation.y = p.heading;
     }
   }
 

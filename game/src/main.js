@@ -1,16 +1,17 @@
-// main.js — Heatwave City's glue. Builds the world (city, traffic,
-// pedestrians, police, combat, missions), owns the input, the camera,
-// carjacking and helicopter boarding, the crime bookkeeping, the radio
-// and the game-state screens, then runs the loop. Nico Serrano's story
-// lives in missions.js; this file makes the city breathe around it.
+// main.js — Heatwave City's glue for the Dex Marlowe campaign. Builds
+// the world (city, traffic, pedestrians, police, combat, missions),
+// owns input, the camera, carjacking, helicopter boarding and boat
+// handling, the crime bookkeeping, the four-station radio and the
+// game-state screens, then runs the loop. Dex's sixteen jobs live in
+// missions.js; this file makes the city breathe around them.
 
 import { City } from './city.js';
 import { Player } from './player.js';
 import { Traffic } from './traffic.js';
 import { Pedestrians } from './pedestrians.js';
 import { Police } from './police.js';
-import { Combat, Enemy, WEAPONS } from './combat.js';
-import { Car, Helicopter } from './vehicles.js';
+import { Combat, Enemy } from './combat.js';
+import { Car, Helicopter, Boat } from './vehicles.js';
 import { Hud } from './hud.js';
 import { AudioBand } from './audio.js';
 import { Missions } from './missions.js';
@@ -19,12 +20,12 @@ import { setupShot, isShotMode } from './shots.js';
 import { PLAYER_START, blockCentre, clamp, dist2d, angleDelta } from './config.js';
 
 const params = new URLSearchParams(location.search);
-const seed = parseInt(params.get('seed') || '7', 10) || 7;
+const seed = parseInt(params.get('seed') || '11', 10) || 11;
 const shotName = isShotMode(params);
 
 const container = document.getElementById('game');
 const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -48,6 +49,7 @@ const hud = new Hud();
 const audio = new AudioBand();
 let save = loadSave();
 audio.muted = !!save.muted;
+let lastSaveT = 0;
 
 const world = {
   scene, hud, audio,
@@ -56,8 +58,10 @@ const world = {
   enemies: [],
   looseCars: [],
   helicopters: [],
+  boats: [],
   playerCar: null,
   playerHeli: null,
+  playerBoat: null,
   enemyClass: { Enemy },
   state: 'title',
   time: 0,
@@ -66,6 +70,7 @@ const world = {
   pedCrimeCd: 0,
   crashCrimeCd: 0,
   cash: save.cash,
+  saveData: save,
 };
 
 world.city = new City(scene, seed);
@@ -82,6 +87,12 @@ world.missions.index = save.mission || 0;
 const marinaHeli = new Helicopter(scene, 0xff7b00, blockCentre(10), blockCentre(5), { heading: -Math.PI / 2 });
 world.helicopters.push(marinaHeli);
 
+// three moored boats the player can take: south docks, east pier,
+// Gull Island's west dock
+world.boats.push(new Boat(scene, 0x3ec1d3, 175, 350, 0));
+world.boats.push(new Boat(scene, 0xff5964, 366, 40, 0));
+world.boats.push(new Boat(scene, 0xffd23f, -65, 468, -Math.PI / 2));
+
 world.targetCars = () => world.traffic.allCars().concat(world.police.cars, world.police.blocks, world.looseCars);
 world.makeCar = (type, color, x, z, heading, opts) => {
   const car = new Car(scene, type, color, x, z, heading, opts);
@@ -95,10 +106,22 @@ world.saveProgress = () => {
   save.mission = world.missions.index;
   save.completed = world.missions.index;
   save.started = true;
-  save.weapons = { smg: world.combat.unlocked.smg, shotgun: world.combat.unlocked.shotgun };
+  save.weapons = {
+    smg: world.combat.unlocked.smg,
+    shotgun: world.combat.unlocked.shotgun,
+    carbine: world.combat.unlocked.carbine,
+  };
   save.ammo = { ...world.combat.ammo };
   save.muted = audio.muted;
+  save.playSeconds = (save.playSeconds || 0) + Math.max(0, Math.round(world.time - lastSaveT));
+  lastSaveT = world.time;
   storeSave(save);
+};
+world.onBriefcase = (id) => {
+  if (!save.briefcases.includes(id)) {
+    save.briefcases.push(id);
+    world.saveProgress();
+  }
 };
 world.damagePlayer = (amount) => {
   if (world.state !== 'playing') return;
@@ -120,10 +143,11 @@ world.onEnemyDown = (enemy) => {
   save.kills++;
   world.addCash(20);
   const roll = Math.random();
-  if (roll < 0.3) world.combat.dropPickup('pistol', enemy.x, enemy.z, 10);
-  else if (roll < 0.42) world.combat.dropPickup('smg', enemy.x, enemy.z, 24);
-  else if (roll < 0.5) world.combat.dropPickup('shotgun', enemy.x, enemy.z, 5);
-  else if (roll < 0.58) world.combat.dropPickup('health', enemy.x, enemy.z, 34);
+  if (roll < 0.28) world.combat.dropPickup('pistol', enemy.x, enemy.z, 10);
+  else if (roll < 0.4) world.combat.dropPickup('smg', enemy.x, enemy.z, 24);
+  else if (roll < 0.47) world.combat.dropPickup('shotgun', enemy.x, enemy.z, 5);
+  else if (roll < 0.53) world.combat.dropPickup('carbine', enemy.x, enemy.z, 12);
+  else if (roll < 0.61) world.combat.dropPickup('health', enemy.x, enemy.z, 34);
 };
 world.onCarDestroyed = (car) => {
   world.combat.explosion(car.x, car.z, world);
@@ -198,8 +222,39 @@ function exitHeli() {
   audio.rotor(false);
 }
 
+function enterBoat(boat) {
+  boat.occupied = true;
+  world.playerBoat = boat;
+  world.player.mesh.visible = false;
+  world.player.x = boat.x; world.player.z = boat.z;
+  hud.toast('Cast off — W/S throttle, A/D rudder. Mind the shoreline');
+  audio.ensure();
+}
+
+function exitBoat() {
+  const boat = world.playerBoat;
+  if (!boat) return;
+  boat.occupied = false;
+  boat.speed = 0;
+  world.playerBoat = null;
+  // step ashore: first dry spot in a ring around the boat wins
+  let placed = false;
+  for (let i = 0; i < 8 && !placed; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    const nx = boat.x + Math.sin(a) * 3.6, nz = boat.z + Math.cos(a) * 3.6;
+    if (world.city.isLand(nx, nz)) {
+      world.player.x = nx; world.player.z = nz;
+      placed = true;
+    }
+  }
+  if (!placed) { world.player.x = boat.x; world.player.z = boat.z; }
+  world.player.mesh.visible = true;
+  audio.boat(0, false);
+}
+
 function respawn(x, z) {
   if (world.playerCar) exitCar();
+  if (world.playerBoat) exitBoat();
   if (world.playerHeli) { world.playerHeli.occupied = false; world.playerHeli = null; audio.rotor(false); }
   world.player.x = x; world.player.z = z;
   world.player.health = 100;
@@ -218,9 +273,9 @@ function doBusted() {
   const fine = Math.min(world.cash, 150 + world.police.wanted * 70);
   world.cash -= fine;
   document.getElementById('bustedtext').textContent =
-    'The Heatwave PD boxed Nico in. Fine paid: $' + fine + '. Val is not impressed.';
+    'Detective Brandt finally boxed Dex in. Fine paid: $' + fine + '. Sable is not impressed.';
   document.getElementById('busted').classList.remove('hidden');
-  audio.busted(); audio.siren(false); audio.engine(0, false); audio.rotor(false);
+  audio.busted(); audio.siren(false); audio.engine(0, false); audio.rotor(false); audio.boat(0, false);
   world.missions.onPlayerDown();
   world.saveProgress();
 }
@@ -233,9 +288,9 @@ function doWasted() {
   const bill = Math.min(world.cash, 175);
   world.cash -= bill;
   document.getElementById('wastedtext').textContent =
-    'Nico wakes up at Heatwave General. Hospital bill: $' + bill + '.';
+    'Dex wakes up at Heatwave General with a headache and a bill: $' + bill + '.';
   document.getElementById('wasted').classList.remove('hidden');
-  audio.siren(false); audio.engine(0, false); audio.rotor(false);
+  audio.siren(false); audio.engine(0, false); audio.rotor(false); audio.boat(0, false);
   world.missions.onPlayerDown();
   world.saveProgress();
 }
@@ -249,7 +304,7 @@ function cycleRadio() {
   audio.ensure();
   if (radioStation < 0) {
     radioStation = audio.radio(true, 0);
-  } else if (radioStation >= 2) {
+  } else if (radioStation >= 3) {
     radioOff();
     hud.toast('Radio off');
     return;
@@ -276,15 +331,16 @@ window.addEventListener('keydown', (e) => {
       save.muted = audio.muted; world.saveProgress();
       hud.toast(audio.muted ? 'Muted' : 'Sound on');
     }
-    if (e.code === 'KeyQ') { hud.setWeapon(world.combat); world.combat.cycle(1); hud.setWeapon(world.combat); }
+    if (e.code === 'KeyQ') { world.combat.cycle(1); hud.setWeapon(world.combat); }
     if (e.code === 'Digit1') { world.combat.select('fist'); hud.setWeapon(world.combat); }
     if (e.code === 'Digit2') { world.combat.select('pistol'); hud.setWeapon(world.combat); }
     if (e.code === 'Digit3') { if (world.combat.select('smg')) hud.setWeapon(world.combat); }
     if (e.code === 'Digit4') { if (world.combat.select('shotgun')) hud.setWeapon(world.combat); }
+    if (e.code === 'Digit5') { if (world.combat.select('carbine')) hud.setWeapon(world.combat); }
     if (e.code === 'KeyR' && world.playerCar) cycleRadio();
     if (e.code === 'Enter') {
       if (world.missions.failed) world.missions.retry();
-      else if (!world.missions.active && !world.missions.done) world.missions.startNext();
+      else if (!world.missions.active && !world.missions.act && !world.missions.done) world.missions.startNext();
     }
     if (e.code === 'KeyP' || e.code === 'Escape') pauseGame();
   } else if (world.state === 'paused' && (e.code === 'KeyP' || e.code === 'Escape')) resumeGame();
@@ -294,7 +350,7 @@ window.addEventListener('keyup', (e) => {
   if (e.code === 'KeyF') { firing = false; world.combat.releaseTrigger(); }
 });
 window.addEventListener('wheel', (e) => {
-  if (world.state === 'playing' && !world.playerCar && !world.playerHeli) {
+  if (world.state === 'playing' && !world.playerCar && !world.playerHeli && !world.playerBoat) {
     world.combat.cycle(e.deltaY > 0 ? 1 : -1);
     hud.setWeapon(world.combat);
   }
@@ -316,7 +372,7 @@ window.addEventListener('mousemove', (e) => {
 window.addEventListener('mouseup', () => {
   // a clean click (no drag) is a trigger pull; a drag just orbits
   if (dragging && dragMoved < 6 && performance.now() - mouseDownAt < 400
-    && world.state === 'playing' && !world.playerCar && !world.playerHeli) {
+    && world.state === 'playing' && !world.playerCar && !world.playerHeli && !world.playerBoat) {
     firing = true;
     setTimeout(() => { firing = false; world.combat.releaseTrigger(); }, 90);
   }
@@ -325,10 +381,15 @@ window.addEventListener('mouseup', () => {
 
 function toggleVehicle() {
   if (world.playerHeli) { exitHeli(); return; }
+  if (world.playerBoat) { exitBoat(); return; }
   if (world.playerCar) { exitCar(); return; }
   // helicopter first if one is close and landed
   for (const heli of world.helicopters) {
     if (heli.landed && dist2d(world.player.x, world.player.z, heli.x, heli.z) < 5.5) { enterHeli(heli); return; }
+  }
+  // then a moored boat, if Dex is standing on its dock
+  for (const boat of world.boats) {
+    if (!boat.dead && dist2d(world.player.x, world.player.z, boat.x, boat.z) < 5.5) { enterBoat(boat); return; }
   }
   const car = world.grabNearestCar(world.player.x, world.player.z);
   if (car && dist2d(world.player.x, world.player.z, car.x, car.z) < 4.8) world.enterCar(car);
@@ -337,8 +398,9 @@ function toggleVehicle() {
 function pauseGame() {
   world.state = 'paused';
   document.getElementById('pausestats').textContent =
-    'Cash $' + world.cash + ' · Jobs done ' + world.missions.index + '/9 · Kills ' + save.kills
-    + ' · Busts ' + save.busts + ' · Wasted ' + save.wasted;
+    'Cash $' + world.cash.toLocaleString('en-US') + ' · Jobs done ' + world.missions.index + '/16 · Kills ' + save.kills
+    + ' · Busts ' + save.busts + ' · Wasted ' + save.wasted
+    + ' · Briefcases ' + save.briefcases.length + '/20';
   document.getElementById('pause').classList.remove('hidden');
   audio.engine(0, false);
 }
@@ -350,16 +412,18 @@ function resumeGame() {
 function startGame(fresh) {
   if (fresh) {
     save = wipeSave();
+    world.saveData = save;
     world.cash = save.cash;
     world.missions.index = 0;
-    world.combat.unlocked = { fist: true, pistol: true, smg: false, shotgun: false };
-    world.combat.ammo = { pistol: 40, smg: 0, shotgun: 0 };
+    world.combat.unlocked = { fist: true, pistol: true, smg: false, shotgun: false, carbine: false };
+    world.combat.ammo = { pistol: 48, smg: 0, shotgun: 0, carbine: 0 };
     respawn(PLAYER_START.x, PLAYER_START.z);
   } else {
     world.cash = save.cash;
     world.missions.index = save.mission || 0;
     world.combat.unlocked.smg = !!save.weapons.smg;
     world.combat.unlocked.shotgun = !!save.weapons.shotgun;
+    world.combat.unlocked.carbine = !!save.weapons.carbine;
     world.combat.ammo = { ...save.ammo };
   }
   hud.setCash(world.cash);
@@ -372,7 +436,7 @@ function startGame(fresh) {
   audio.setMuted(!!save.muted);
   if (!world.missions.done) world.missions.startNext();
   else hud.setObjective('Free roam — Heatwave City is yours');
-  hud.toast('Welcome to Heatwave City, Nico');
+  hud.toast('Welcome to Heatwave City, Dex');
 }
 
 document.getElementById('newgame').addEventListener('click', () => startGame(true));
@@ -403,13 +467,14 @@ function updateCamera(dt) {
     const floorY = world.city.heightAt(h.x, h.z) + h.alt;
     camera.position.lerp(camTarget.set(bx, floorY + 5.5, bz), Math.min(1, dt * 4));
     camera.lookAt(h.x + Math.sin(h.heading) * 8, floorY + 1, h.z + Math.cos(h.heading) * 8);
-  } else if (world.playerCar) {
-    const car = world.playerCar;
-    chaseYaw += angleDelta(chaseYaw, car.heading) * Math.min(1, dt * 3.2);
-    const bx = car.x - Math.sin(chaseYaw) * 11.5;
-    const bz = car.z - Math.cos(chaseYaw) * 11.5;
-    camera.position.lerp(camTarget.set(bx, 4.6, bz), Math.min(1, dt * 5));
-    camera.lookAt(car.x + Math.sin(car.heading) * 6, 1.4, car.z + Math.cos(car.heading) * 6);
+  } else if (world.playerCar || world.playerBoat) {
+    const veh = world.playerCar || world.playerBoat;
+    chaseYaw += angleDelta(chaseYaw, veh.heading) * Math.min(1, dt * 3.2);
+    const bx = veh.x - Math.sin(chaseYaw) * 11.5;
+    const bz = veh.z - Math.cos(chaseYaw) * 11.5;
+    const by = world.playerBoat ? 3.6 : 4.6;
+    camera.position.lerp(camTarget.set(bx, by, bz), Math.min(1, dt * 5));
+    camera.lookAt(veh.x + Math.sin(veh.heading) * 6, 1.2, veh.z + Math.cos(veh.heading) * 6);
   } else {
     const p = world.player;
     const dist = 8;
@@ -477,7 +542,7 @@ function animate() {
   const dt = Math.min(clock.getDelta(), 0.05);
   world.time += dt;
   const t = world.time;
-  const focus = world.playerCar || world.player;
+  const focus = world.playerCar || world.playerBoat || world.playerHeli || world.player;
   world.city.update(dt, t, focus);
   world.shotCrimeCd = Math.max(0, world.shotCrimeCd - dt);
   world.pedCrimeCd = Math.max(0, world.pedCrimeCd - dt);
@@ -488,6 +553,7 @@ function animate() {
     world.traffic.update(dt, world);
     world.peds.update(dt, world.city);
     for (const cop of world.police.cars) cop.flashLights(t);
+    if (world.police.heli) world.police.heli.syncMesh(world.city);
     if (shotPose) {
       camera.position.set(shotPose.camX, shotPose.camY, shotPose.camZ);
       camera.lookAt(shotPose.lookX, shotPose.lookY, shotPose.lookZ);
@@ -507,6 +573,17 @@ function animate() {
       world.player.x = heli.x; world.player.z = heli.z;
       audio.rotor(true, clamp(heli.rotorSpin / 42, 0, 1));
       hud.setSpeed(heli.speed * 3.6, true);
+    } else if (world.playerBoat) {
+      const boat = world.playerBoat;
+      const input = {
+        throttle: (keys.KeyW || keys.ArrowUp ? 1 : 0) + (keys.KeyS || keys.ArrowDown ? -1 : 0),
+        steer: (keys.KeyA || keys.ArrowLeft ? 1 : 0) + (keys.KeyD || keys.ArrowRight ? -1 : 0),
+      };
+      boat.drive(dt, input, world.city);
+      world.player.x = boat.x; world.player.z = boat.z;
+      audio.boat(clamp(Math.abs(boat.speed) / 21, 0, 1), true);
+      hud.setSpeed(boat.speed * 3.6, true);
+      if (boat.dead) { hud.toast('The boat is sinking — swim for it'); exitBoat(); }
     } else if (world.playerCar) {
       const car = world.playerCar;
       const input = {
@@ -547,7 +624,7 @@ function animate() {
       world.player.update(dt, move, !!(keys.ShiftLeft || keys.ShiftRight), world.city);
       hud.setSpeed(0, false);
       audio.engine(0, false);
-      // firing: aim where the camera looks, 30 units ahead of Nico
+      // firing: aim where the camera looks, 30 units ahead of Dex
       const w = world.combat.current;
       world.player.setWeaponDrawn(w !== 'fist');
       world.player.aiming = firing && w !== 'fist';
@@ -573,17 +650,23 @@ function animate() {
     if (promptTimer <= 0) {
       promptTimer = 0.12;
       if (world.playerHeli) hud.setPrompt(world.playerHeli.landed ? 'E — climb out' : 'Space climb · Shift descend');
+      else if (world.playerBoat) hud.setPrompt('E — step ashore · W/S — throttle');
       else if (world.playerCar) hud.setPrompt('E — exit · Space — handbrake · R — radio');
       else {
         let nearHeli = false;
         for (const heli of world.helicopters) {
           if (heli.landed && dist2d(world.player.x, world.player.z, heli.x, heli.z) < 5.5) nearHeli = true;
         }
+        let nearBoat = false;
+        for (const boat of world.boats) {
+          if (!boat.dead && dist2d(world.player.x, world.player.z, boat.x, boat.z) < 5.5) nearBoat = true;
+        }
         const car = world.grabNearestCar(world.player.x, world.player.z);
         if (nearHeli) hud.setPrompt('E — board the helicopter');
+        else if (nearBoat) hud.setPrompt('E — take the boat');
         else if (car && dist2d(world.player.x, world.player.z, car.x, car.z) < 4.8) hud.setPrompt('E — ' + (car.occupied ? 'carjack this car' : 'enter car'));
         else if (world.missions.failed) hud.setPrompt('Enter — retry the job');
-        else if (!world.missions.active && !world.missions.done) hud.setPrompt('Enter — take Val\'s next job');
+        else if (!world.missions.active && !world.missions.act && !world.missions.done) hud.setPrompt('Enter — take Sable\'s next job');
         else hud.setPrompt('');
       }
     }

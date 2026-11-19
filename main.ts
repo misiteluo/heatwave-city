@@ -3,10 +3,12 @@
 //
 // The game is the static site in game/: an original 3D open-world crime
 // game — vendored three.js r128, plain ES modules, procedural canvas
-// textures, synthesized WebAudio, zero network requests. You are Nico
-// Serrano, a driver working nine jobs for fixer Valentina "Val" Rojas
-// across a 12x12-block neon peninsula: downtown towers, portside sheds,
-// a marina, a beachfront, and a causeway out to Gull Island.
+// textures, synthesized WebAudio, zero network requests. You are Dex
+// Marlowe, a getaway driver working sixteen jobs across four days for
+// fixer Sable Quinn: a 12x12-block neon peninsula city (downtown, the
+// Neon Mile, portside, marina, beachfront, the heights), a causeway out
+// to Gull Island, and the smugglers' rock of Pelican Cay across the bay
+// — cars, a helicopter and boats included.
 //
 // This program copies game/ and screenshots/ into $MAKEFUN_OUTPUT_DIR
 // (default /output) and writes the judge's dossier.json there using
@@ -31,9 +33,6 @@ if (existsSync(join(here, 'screenshots'))) {
   cpSync(join(here, 'screenshots'), join(out, 'screenshots'), { recursive: true });
 }
 
-// Caps mirror the scorer's own gate: at most 4 screenshots of 256 KiB,
-// at most 993 game files totalling 48 MiB, no game path over 1000
-// bytes, and the dossier text budget of 160 KiB.
 writeFileSync(
   join(out, 'dossier.json'),
   buildDossier(out, {

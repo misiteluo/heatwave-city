@@ -1,7 +1,7 @@
 // save.js — progress in localStorage: cash, story progress, the weapon
-// locker, lifetime stats and the mute flag. Defensive by design: a
-// corrupt or half-old save merges over fresh defaults instead of
-// breaking the title screen.
+// locker, collected briefcases, side-activity tallies and lifetime
+// stats. Defensive by design: a corrupt or half-old save merges over
+// fresh defaults instead of breaking the title screen.
 
 import { SAVE_KEY } from './config.js';
 
@@ -15,8 +15,11 @@ export function defaultSave() {
     kills: 0,
     started: false,
     muted: false,
-    weapons: { smg: false, shotgun: false },
-    ammo: { pistol: 40, smg: 0, shotgun: 0 },
+    weapons: { smg: false, shotgun: false, carbine: false },
+    ammo: { pistol: 48, smg: 0, shotgun: 0, carbine: 0 },
+    briefcases: [],
+    activities: { races: 0, fares: 0, packages: 0, hideouts: 0 },
+    playSeconds: 0,
   };
 }
 
@@ -24,7 +27,8 @@ function mergeInto(base, data) {
   if (!data || typeof data !== 'object') return base;
   for (const k of Object.keys(base)) {
     if (data[k] === undefined) continue;
-    if (typeof base[k] === 'object' && base[k] !== null) mergeInto(base[k], data[k]);
+    if (Array.isArray(base[k])) { if (Array.isArray(data[k])) base[k] = data[k].slice(); }
+    else if (typeof base[k] === 'object' && base[k] !== null) mergeInto(base[k], data[k]);
     else if (typeof data[k] === typeof base[k]) base[k] = data[k];
   }
   return base;

@@ -7,21 +7,21 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌴</text></svg>">
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
-  html,body { width:100%; height:100%; overflow:hidden; background:#160f1e; font-family:'Segoe UI',system-ui,sans-serif; }
+  html,body { width:100%; height:100%; overflow:hidden; background:#0d0a1c; font-family:'Segoe UI',system-ui,sans-serif; }
   #game { position:fixed; inset:0; }
   canvas.webgl { display:block; }
-  .panel { background:rgba(12,14,20,.72); color:#fff; border-radius:10px; padding:8px 12px; }
+  .panel { background:rgba(10,12,22,.74); color:#fff; border-radius:10px; padding:8px 12px; }
   #minimap { position:fixed; left:14px; top:14px; width:184px; height:184px; border-radius:12px;
-    border:2px solid rgba(255,255,255,.55); box-shadow:0 4px 18px rgba(0,0,0,.45); background:#155e75; z-index:5; }
+    border:2px solid rgba(255,210,63,.6); box-shadow:0 4px 18px rgba(0,0,0,.5); background:#0d4a63; z-index:5; }
   #stars { position:fixed; right:18px; top:12px; font-size:30px; letter-spacing:3px; color:#ffd23f;
-    text-shadow:0 2px 8px rgba(0,0,0,.8); z-index:5; }
-  #cashbox { position:fixed; left:14px; bottom:16px; z-index:5; min-width:200px; }
-  #cash { font-size:24px; font-weight:700; color:#7bf1a8; }
-  .bar { height:11px; background:rgba(255,255,255,.18); border-radius:6px; margin-top:6px; overflow:hidden; }
+    text-shadow:0 0 10px rgba(255,170,0,.75), 0 2px 8px rgba(0,0,0,.8); z-index:5; }
+  #cashbox { position:fixed; left:14px; bottom:16px; z-index:5; min-width:204px; border:1px solid rgba(255,210,63,.3); }
+  #cash { font-size:24px; font-weight:800; color:#7bf1a8; text-shadow:0 1px 3px #000; }
+  .bar { height:11px; background:rgba(255,255,255,.16); border-radius:6px; margin-top:6px; overflow:hidden; }
   .bar > div { height:100%; transition:width .15s; }
   #healthfill { width:100%; background:#06d6a0; }
   #armorbar { display:none; }
-  #armorfill { width:0%; background:#9b5de5; }
+  #armorfill { width:0%; background:#5b8cff; }
   #weaponbox { margin-top:7px; font-size:15px; color:#ffe9a3; display:flex; justify-content:space-between; gap:14px; }
   #weaponname { font-weight:800; letter-spacing:1px; color:#ffd23f; }
   #speed { position:fixed; right:22px; bottom:20px; font-size:32px; font-weight:800; color:#fff;
@@ -39,21 +39,28 @@
   #dlgtext { font-size:16.5px; line-height:1.4; margin-top:2px; }
   #missionfail { position:fixed; top:64px; left:50%; transform:translateX(-50%); z-index:7; display:none;
     background:rgba(120,10,20,.88); color:#fff; border-radius:10px; padding:10px 18px; font-size:17px; font-weight:700;
-    border:1px solid rgba(255,120,130,.7); }
+    border:1px solid rgba(255,120,130,.7); max-width:72%; text-align:center; }
   #toast { position:fixed; bottom:186px; left:50%; transform:translateX(-50%); z-index:6; font-size:19px;
-    font-weight:700; color:#ffd23f; text-shadow:0 2px 8px #000; opacity:0; transition:opacity .3s; pointer-events:none; }
+    font-weight:700; color:#ffd23f; text-shadow:0 2px 8px #000; opacity:0; transition:opacity .3s; pointer-events:none;
+    max-width:76%; text-align:center; }
   #bustwrap { position:fixed; bottom:226px; left:50%; transform:translateX(-50%); width:240px; z-index:6; display:none;
     text-align:center; color:#ff8fa3; font-weight:700; }
   #bustbar { height:10px; background:rgba(255,255,255,.2); border-radius:5px; overflow:hidden; margin-top:4px; }
   #bustfill { height:100%; width:0%; background:#e63946; }
-  #vignette { position:fixed; inset:0; pointer-events:none; z-index:4; opacity:0; transition:opacity .12s;
+  #vignette { position:fixed; inset:0; pointer-events:none; z-index:4; opacity:0;
     background:radial-gradient(ellipse at center, transparent 52%, rgba(200,0,0,.55) 100%); }
+  #daybanner { position:fixed; top:29%; left:0; right:0; text-align:center; z-index:7; opacity:0;
+    transition:opacity .7s ease; pointer-events:none; }
+  #daytitle { font-size:54px; font-weight:900; letter-spacing:10px; color:#ffd23f;
+    text-shadow:0 0 26px rgba(255,150,40,.8), 0 4px 12px #000; }
+  #daysub { font-size:20px; font-weight:600; color:#fff; text-shadow:0 2px 8px #000; margin-top:2px; }
   .screen { position:fixed; inset:0; z-index:10; display:flex; flex-direction:column; align-items:center; justify-content:center;
-    background:linear-gradient(160deg, rgba(255,122,24,.88), rgba(214,40,57,.88) 55%, rgba(27,18,60,.94));
+    background:linear-gradient(160deg, rgba(255,122,24,.9), rgba(214,40,57,.9) 55%, rgba(27,18,60,.95));
     color:#fff; text-align:center; padding:24px; }
   .screen h1 { font-size:64px; letter-spacing:4px; text-shadow:0 4px 0 #b3001b, 0 10px 28px rgba(0,0,0,.5); }
   .screen h2 { font-size:44px; letter-spacing:3px; }
-  .screen p { max-width:600px; margin:14px 0; font-size:17px; line-height:1.5; }
+  .screen p { max-width:620px; margin:14px 0; font-size:17px; line-height:1.55; }
+  .screen .cast { font-size:14px; color:#ffe9c9; letter-spacing:.4px; margin-top:0; }
   .btn { pointer-events:auto; cursor:pointer; border:none; border-radius:10px; padding:13px 34px; margin:6px;
     font-size:19px; font-weight:700; background:#ffd23f; color:#3a2200; box-shadow:0 4px 0 #b8860b; }
   .btn:hover { background:#ffe066; }
@@ -72,7 +79,7 @@
   <div id="cash">$150</div>
   <div class="bar"><div id="healthfill"></div></div>
   <div class="bar" id="armorbar"><div id="armorfill"></div></div>
-  <div id="weaponbox"><span id="weaponname">PISTOL</span><span>🔫 <span id="ammo">40</span></span></div>
+  <div id="weaponbox"><span id="weaponname">PISTOL</span><span id="ammo">48</span></div>
 </div>
 <div id="speed">0 km/h</div>
 <div id="radio"></div>
@@ -81,40 +88,43 @@
 <div id="toast"></div>
 <div id="bustwrap">BUSTED IN…<div id="bustbar"><div id="bustfill"></div></div></div>
 <div id="vignette"></div>
+<div id="daybanner"><div id="daytitle"></div><div id="daysub"></div></div>
 
 <div id="title" class="screen">
   <h1>HEATWAVE CITY</h1>
-  <p>Nico Serrano rolled into Heatwave City with a burnt licence and one phone number:
-     Valentina "Val" Rojas, a fixer who pays cash for fast driving and faster decisions.
-     Nine jobs stand between Nico and Marco Delgado's casino empire — steal the Comet,
-     tail the lieutenant, hold the Meridian plaza, fly the ledger off Gull Island,
-     and outrun every star in the sky.</p>
+  <p>Dex Marlowe rolled into Heatwave City with a torched past and one phone number that
+     still answers: Sable Quinn, a fixer who pays cash for fast driving and faster decisions.
+     Sixteen jobs across four days stand between Dex and Victor Crane's casino empire —
+     steal the Zephyr, tail the lieutenant, hold the Meridian plaza, fly the ledger off
+     Gull Island, race the bay by boat, and outrun every star in the sky.</p>
+  <p class="cast">Sable Quinn, fixer · Rosa Vega, mechanic · Victor Crane, casino king ·
+     Jonah Pierce, his lieutenant · Det. Elias Brandt, the cop who wants Dex personally</p>
   <div>
     <button class="btn" id="newgame">New Game</button>
     <button class="btn secondary" id="continue">Continue</button>
   </div>
   <div class="controls">
-    WASD move / drive / fly &nbsp;·&nbsp; Shift sprint (in heli: descend) &nbsp;·&nbsp; Space handbrake (in heli: climb)<br>
-    E enter / exit vehicle &nbsp;·&nbsp; F or hold click fire &nbsp;·&nbsp; Q / 1–4 weapon wheel &nbsp;·&nbsp; R radio (in car)<br>
+    WASD move / drive / fly / sail &nbsp;·&nbsp; Shift sprint (in heli: descend) &nbsp;·&nbsp; Space handbrake (in heli: climb)<br>
+    E enter / exit car, helicopter or boat &nbsp;·&nbsp; F or hold click fire &nbsp;·&nbsp; Q / wheel / 1–5 weapon wheel &nbsp;·&nbsp; R radio (in car)<br>
     Drag mouse orbit camera &nbsp;·&nbsp; Enter next job / retry &nbsp;·&nbsp; P pause &nbsp;·&nbsp; M mute
   </div>
 </div>
 
-<div id="pause" class="screen hidden" style="background:rgba(10,10,24,.82)">
+<div id="pause" class="screen hidden" style="background:rgba(10,10,24,.85)">
   <h2>PAUSED</h2>
   <p id="pausestats"></p>
   <button class="btn" id="resume">Resume</button>
 </div>
 
-<div id="busted" class="screen hidden" style="background:linear-gradient(160deg, rgba(30,60,140,.92), rgba(10,10,30,.95))">
+<div id="busted" class="screen hidden" style="background:linear-gradient(160deg, rgba(30,60,140,.93), rgba(10,10,30,.96))">
   <h2>BUSTED</h2>
-  <p id="bustedtext">The Heatwave PD boxed Nico in.</p>
+  <p id="bustedtext">Detective Brandt finally boxed Dex in.</p>
   <button class="btn" id="bustedbtn">Pay the fine &amp; walk</button>
 </div>
 
-<div id="wasted" class="screen hidden" style="background:linear-gradient(160deg, rgba(120,10,20,.92), rgba(15,5,5,.96))">
+<div id="wasted" class="screen hidden" style="background:linear-gradient(160deg, rgba(120,10,20,.93), rgba(15,5,5,.97))">
   <h2>WASTED</h2>
-  <p id="wastedtext">Nico wakes up at Heatwave General, lighter in the wallet.</p>
+  <p id="wastedtext">Dex wakes up at Heatwave General, lighter in the wallet.</p>
   <button class="btn" id="wastedbtn">Leave hospital</button>
 </div>
 
