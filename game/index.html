@@ -7,29 +7,34 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌴</text></svg>">
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
-  html,body { width:100%; height:100%; overflow:hidden; background:#0d0a1c; font-family:'Segoe UI',system-ui,sans-serif; }
+  html,body { width:100%; height:100%; overflow:hidden; background:#0a0716; font-family:'Segoe UI',system-ui,sans-serif; }
   #game { position:fixed; inset:0; }
   canvas.webgl { display:block; }
-  .panel { background:rgba(10,12,22,.74); color:#fff; border-radius:10px; padding:8px 12px; }
-  #minimap { position:fixed; left:14px; top:14px; width:184px; height:184px; border-radius:12px;
-    border:2px solid rgba(255,210,63,.6); box-shadow:0 4px 18px rgba(0,0,0,.5); background:#0d4a63; z-index:5; }
+  .panel { background:rgba(9,11,24,.72); color:#fff; border-radius:12px; padding:9px 13px;
+    backdrop-filter:blur(6px); border:1px solid rgba(255,255,255,.09);
+    box-shadow:0 6px 22px rgba(0,0,0,.45); }
+  #minimap { position:fixed; left:14px; top:14px; width:184px; height:184px; border-radius:14px;
+    border:2px solid rgba(255,210,63,.55); box-shadow:0 6px 22px rgba(0,0,0,.55); background:#0d4a63; z-index:5; }
   #stars { position:fixed; right:18px; top:12px; font-size:30px; letter-spacing:3px; color:#ffd23f;
-    text-shadow:0 0 10px rgba(255,170,0,.75), 0 2px 8px rgba(0,0,0,.8); z-index:5; }
-  #cashbox { position:fixed; left:14px; bottom:16px; z-index:5; min-width:204px; border:1px solid rgba(255,210,63,.3); }
-  #cash { font-size:24px; font-weight:800; color:#7bf1a8; text-shadow:0 1px 3px #000; }
-  .bar { height:11px; background:rgba(255,255,255,.16); border-radius:6px; margin-top:6px; overflow:hidden; }
+    text-shadow:0 0 12px rgba(255,170,0,.8), 0 2px 8px rgba(0,0,0,.8); z-index:5; }
+  #cashbox { position:fixed; left:14px; bottom:16px; z-index:5; min-width:208px; border:1px solid rgba(255,210,63,.28); }
+  #cash { font-size:25px; font-weight:800; color:#7bf1a8; text-shadow:0 1px 3px #000; letter-spacing:.5px; }
+  .bar { height:11px; background:rgba(255,255,255,.15); border-radius:6px; margin-top:6px; overflow:hidden; }
   .bar > div { height:100%; transition:width .15s; }
   #healthfill { width:100%; background:#06d6a0; }
   #armorbar { display:none; }
   #armorfill { width:0%; background:#5b8cff; }
+  #nitrobar { height:7px; }
+  #nitrofill { width:0%; background:linear-gradient(90deg,#ff7b00,#ffd23f); }
+  #nitrolabel { font-size:10px; letter-spacing:2px; color:#ffb066; margin-top:5px; font-weight:700; }
   #weaponbox { margin-top:7px; font-size:15px; color:#ffe9a3; display:flex; justify-content:space-between; gap:14px; }
   #weaponname { font-weight:800; letter-spacing:1px; color:#ffd23f; }
-  #speed { position:fixed; right:22px; bottom:20px; font-size:32px; font-weight:800; color:#fff;
+  #speed { position:fixed; right:22px; bottom:20px; font-size:33px; font-weight:800; color:#fff;
     text-shadow:0 2px 10px rgba(0,0,0,.85); z-index:5; display:none; text-align:right; }
-  #radio { position:fixed; right:22px; bottom:64px; font-size:14px; font-weight:700; color:#7be0f1;
+  #radio { position:fixed; right:22px; bottom:66px; font-size:14px; font-weight:700; color:#7be0f1;
     text-shadow:0 2px 6px #000; z-index:5; display:none; }
   #objective { position:fixed; top:14px; left:50%; transform:translateX(-50%); max-width:60%; z-index:5;
-    text-align:center; font-size:16px; line-height:1.35; display:none; border:1px solid rgba(255,210,63,.5); }
+    text-align:center; font-size:16px; line-height:1.35; display:none; border:1px solid rgba(255,210,63,.45); }
   #objectivetext { color:#ffe9a3; }
   #prompt { position:fixed; bottom:118px; left:50%; transform:translateX(-50%); z-index:5; display:none;
     font-size:17px; font-weight:600; }
@@ -37,6 +42,15 @@
     display:none; border-left:4px solid #ffd23f; }
   #dlgwho { color:#ffd23f; font-weight:800; font-size:14px; letter-spacing:1px; text-transform:uppercase; }
   #dlgtext { font-size:16.5px; line-height:1.4; margin-top:2px; }
+  #phone { position:fixed; right:18px; top:64px; width:262px; z-index:6; display:none; opacity:0;
+    transition:opacity .4s; border-radius:16px; border:1px solid rgba(255,255,255,.22);
+    background:rgba(12,14,22,.88); padding:10px 13px; }
+  #phone::before { content:'✉ MESSAGE'; font-size:10px; letter-spacing:2px; color:#8be0a4; font-weight:800; }
+  #phonewho { color:#7be0f1; font-weight:800; font-size:13.5px; margin-top:3px; }
+  #phonetext { font-size:14px; line-height:1.35; color:#f2f2f2; }
+  #hitmark { position:fixed; left:50%; top:46%; transform:translate(-50%,-50%); z-index:6; opacity:0;
+    font-size:30px; font-weight:900; color:#fff; text-shadow:0 0 8px rgba(0,0,0,.7); pointer-events:none;
+    transition:opacity .12s; }
   #missionfail { position:fixed; top:64px; left:50%; transform:translateX(-50%); z-index:7; display:none;
     background:rgba(120,10,20,.88); color:#fff; border-radius:10px; padding:10px 18px; font-size:17px; font-weight:700;
     border:1px solid rgba(255,120,130,.7); max-width:72%; text-align:center; }
@@ -51,21 +65,27 @@
     background:radial-gradient(ellipse at center, transparent 52%, rgba(200,0,0,.55) 100%); }
   #daybanner { position:fixed; top:29%; left:0; right:0; text-align:center; z-index:7; opacity:0;
     transition:opacity .7s ease; pointer-events:none; }
-  #daytitle { font-size:54px; font-weight:900; letter-spacing:10px; color:#ffd23f;
-    text-shadow:0 0 26px rgba(255,150,40,.8), 0 4px 12px #000; }
+  #daytitle { font-size:56px; font-weight:900; letter-spacing:12px; color:#ffd23f;
+    text-shadow:0 0 28px rgba(255,150,40,.85), 0 4px 12px #000; }
   #daysub { font-size:20px; font-weight:600; color:#fff; text-shadow:0 2px 8px #000; margin-top:2px; }
   .screen { position:fixed; inset:0; z-index:10; display:flex; flex-direction:column; align-items:center; justify-content:center;
-    background:linear-gradient(160deg, rgba(255,122,24,.9), rgba(214,40,57,.9) 55%, rgba(27,18,60,.95));
+    background:linear-gradient(165deg, rgba(255,122,24,.92), rgba(214,40,57,.9) 52%, rgba(23,14,54,.96));
     color:#fff; text-align:center; padding:24px; }
-  .screen h1 { font-size:64px; letter-spacing:4px; text-shadow:0 4px 0 #b3001b, 0 10px 28px rgba(0,0,0,.5); }
+  .screen h1 { font-size:66px; letter-spacing:5px; font-weight:900;
+    background:linear-gradient(180deg, #fff6d8 20%, #ffd23f 55%, #ff7b00);
+    -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
+    filter:drop-shadow(0 4px 0 rgba(179,0,27,.85)) drop-shadow(0 12px 30px rgba(0,0,0,.5)); }
   .screen h2 { font-size:44px; letter-spacing:3px; }
-  .screen p { max-width:620px; margin:14px 0; font-size:17px; line-height:1.55; }
+  .screen p { max-width:640px; margin:14px 0; font-size:17px; line-height:1.55; }
   .screen .cast { font-size:14px; color:#ffe9c9; letter-spacing:.4px; margin-top:0; }
-  .btn { pointer-events:auto; cursor:pointer; border:none; border-radius:10px; padding:13px 34px; margin:6px;
-    font-size:19px; font-weight:700; background:#ffd23f; color:#3a2200; box-shadow:0 4px 0 #b8860b; }
-  .btn:hover { background:#ffe066; }
-  .btn.secondary { background:#fff; color:#333; box-shadow:0 4px 0 #999; }
+  .btn { pointer-events:auto; cursor:pointer; border:none; border-radius:12px; padding:13px 34px; margin:6px;
+    font-size:19px; font-weight:700; background:linear-gradient(180deg, #ffe066, #ffd23f); color:#3a2200;
+    box-shadow:0 4px 0 #b8860b, 0 8px 20px rgba(0,0,0,.35); }
+  .btn:hover { background:linear-gradient(180deg, #fff0a0, #ffe066); }
+  .btn.secondary { background:rgba(255,255,255,.92); color:#333; box-shadow:0 4px 0 #999; }
   .controls { margin-top:16px; font-size:14px; line-height:1.9; color:#ffe9c9; }
+  #bigmap { width:min(430px,80vw); height:min(430px,80vw); border-radius:14px; margin:10px 0;
+    border:2px solid rgba(255,210,63,.55); background:#0d4a63; }
   .hidden { display:none !important; }
 </style>
 </head>
@@ -79,12 +99,16 @@
   <div id="cash">$150</div>
   <div class="bar"><div id="healthfill"></div></div>
   <div class="bar" id="armorbar"><div id="armorfill"></div></div>
+  <div id="nitrolabel">NITRO</div>
+  <div class="bar" id="nitrobar"><div id="nitrofill"></div></div>
   <div id="weaponbox"><span id="weaponname">PISTOL</span><span id="ammo">48</span></div>
 </div>
 <div id="speed">0 km/h</div>
 <div id="radio"></div>
 <div id="prompt" class="panel"></div>
 <div id="dialogue" class="panel"><div id="dlgwho"></div><div id="dlgtext"></div></div>
+<div id="phone"><div id="phonewho"></div><div id="phonetext"></div></div>
+<div id="hitmark">✕</div>
 <div id="toast"></div>
 <div id="bustwrap">BUSTED IN…<div id="bustbar"><div id="bustfill"></div></div></div>
 <div id="vignette"></div>
@@ -94,24 +118,26 @@
   <h1>HEATWAVE CITY</h1>
   <p>Dex Marlowe rolled into Heatwave City with a torched past and one phone number that
      still answers: Sable Quinn, a fixer who pays cash for fast driving and faster decisions.
-     Sixteen jobs across four days stand between Dex and Victor Crane's casino empire —
-     steal the Zephyr, tail the lieutenant, hold the Meridian plaza, fly the ledger off
-     Gull Island, race the bay by boat, and outrun every star in the sky.</p>
-  <p class="cast">Sable Quinn, fixer · Rosa Vega, mechanic · Victor Crane, casino king ·
-     Jonah Pierce, his lieutenant · Det. Elias Brandt, the cop who wants Dex personally</p>
+     Twenty jobs across five days stand between Dex and Victor Crane's casino empire —
+     steal the Zephyr, rob the casino your way, board the yacht, break your brother out of
+     a prison transport, and stop Crane's limo before it reaches his jet at Gullwing Field.</p>
+  <p class="cast">Sable Quinn, fixer · Rosa Vega, mechanic · Marco Vega, the brother ·
+     Victor Crane, casino king · Jonah Pierce, his lieutenant · Det. Elias Brandt, the cop who wants Dex personally</p>
   <div>
     <button class="btn" id="newgame">New Game</button>
     <button class="btn secondary" id="continue">Continue</button>
   </div>
   <div class="controls">
-    WASD move / drive / fly / sail &nbsp;·&nbsp; Shift sprint (in heli: descend) &nbsp;·&nbsp; Space handbrake (in heli: climb)<br>
-    E enter / exit car, helicopter or boat &nbsp;·&nbsp; F or hold click fire &nbsp;·&nbsp; Q / wheel / 1–5 weapon wheel &nbsp;·&nbsp; R radio (in car)<br>
-    Drag mouse orbit camera &nbsp;·&nbsp; Enter next job / retry &nbsp;·&nbsp; P pause &nbsp;·&nbsp; M mute
+    WASD move / drive / fly / sail &nbsp;·&nbsp; Shift sprint / nitro in a car (in heli: descend) &nbsp;·&nbsp; Space handbrake (in heli: climb)<br>
+    E enter / exit car, helicopter or boat · safehouse door, locker and garage &nbsp;·&nbsp; F or hold click fire &nbsp;·&nbsp; Q / wheel / 1–7 weapons<br>
+    B bribe a star away ($300) &nbsp;·&nbsp; C at Rosa's: repair $120 or store the car &nbsp;·&nbsp; R radio (in car)<br>
+    Drag mouse orbit camera &nbsp;·&nbsp; Enter next job / retry &nbsp;·&nbsp; P pause &amp; map &nbsp;·&nbsp; M mute
   </div>
 </div>
 
-<div id="pause" class="screen hidden" style="background:rgba(10,10,24,.85)">
+<div id="pause" class="screen hidden" style="background:rgba(10,10,24,.88)">
   <h2>PAUSED</h2>
+  <canvas id="bigmap" width="430" height="430"></canvas>
   <p id="pausestats"></p>
   <button class="btn" id="resume">Resume</button>
 </div>

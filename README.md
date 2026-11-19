@@ -4,51 +4,53 @@
 [![rank](https://make.fun/badge/gta6-01/misiteluo/heatwave-city/rank.svg)](https://make.fun/bounty/gta6-01/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
 [![reward](https://make.fun/badge/gta6-01/misiteluo/heatwave-city/reward.svg)](https://make.fun/bounty/gta6-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
 
-An original 3D open-world crime game that runs entirely in the browser — no build step, no network requests, just static files and a vendored copy of three.js.
+An original 3D open-world crime game that runs entirely in the browser — no build step, no network requests, just static files and a vendored copy of three.js. Round 7 is the top-10 push: a bigger city, a longer story with real choices, smarter police, heavier weapons, and every system from the garage to the weather rebuilt one tier deeper.
 
-You are **Dex Marlowe**, a getaway driver with a torched past and one phone number that still answers: **Sable Quinn**, a fixer who pays cash for fast driving and faster decisions. Across **sixteen story jobs in four days** — Arrival, The Crew, High Water, Empire — you steal a yellow Zephyr GT for Rosa Vega's chop shop, run hot freight under a two-star pursuit, tail Crane's lieutenant Jonah Pierce to the pier count room, clear his crew in a shootout, win the Neon Grand Prix, hold the Meridian Bank plaza while a vault crew works, fly a helicopter to Gull Island for the second ledger, wreck a three-truck convoy, run a package across the bay by boat to Pelican Cay, blind the city substation by substation — and then outrun Detective Brandt and every star in the sky to the lighthouse safehouse before signing your own name over Crane's casino, hotel and club.
+You are **Dex Marlowe**, a getaway driver with a torched past and one phone number that still answers: **Sable Quinn**, a fixer who pays cash for fast driving and faster decisions. Across **twenty story jobs in five days** — Arrival, The Crew, High Water, The Reckoning, Coronation — you steal a yellow Zephyr GT for Rosa Vega's chop shop, tail Crane's lieutenant Jonah Pierce to the pier count room, hold the Meridian Bank plaza, fly a helicopter to Gull Island for the second ledger, wreck a three-truck convoy, run the bay by boat, board Crane's yacht the *Meridian Star* at anchor and clear her deck, rob the Coral Casino **your way** — front door loud or service door quiet — cut the city's power in a rainstorm, break your brother Marco out of an armoured prison transport, decide whether Jonah Pierce lives to fight beside you in the finale, crack an armoured cash truck with an RPG, and stop Victor Crane's limousine on the road to Gullwing Field before clearing his terminal and taking his jet. Between jobs, the cast text your phone. Choices stick: spare Pierce and his defectors thin Crane's last stand; ghost the casino and he respects you for it in the end.
 
-## What's in the city
+## What's new in this build
 
-- A **12×12-block peninsula** with real districts — downtown towers, the Neon Mile nightlife strip, portside warehouse sheds and container yards, marina hotels and piers, the wealthy heights, a beachfront boardwalk — plus an east bay, a **causeway out to Gull Island** (lighthouse, safehouse, helipad, dock) and **Pelican Cay**, a smugglers' rock reachable only by boat or air. Every facade is painted on a canvas at boot; windows glow as the **full day–night cycle** turns, streetlights and headlights come on, and the lighthouse beam sweeps the dark.
-- **Seven kinds of wheels**: sedans, sports coupes, pickups, box trucks, taxis, motorcycles and police interceptors, each with its own speed, acceleration, grip and damage model — plus a **flyable helicopter** on the marina pad (and a police helicopter with a spotlight that hunts you from three stars) and **driveable boats** moored at the south docks, the east pier and Gull Island. Damage smokes, then burns, then chains into neighbouring cars. Traffic holds lanes, stops at **working traffic lights**, brakes, honks and turns at intersections. Parked cars can simply be taken — or carjacked, driver and all, if you're willing to be seen.
-- On-foot third-person play with sprint, an orbit camera, and a **five-slot weapon wheel**: fists, pistol, full-auto SMG, a seven-pellet shotgun and a carbine, each with its own ammo pool, pickups, tracers, muzzle flash and sound. Enemies strafe, seek cover when hurt and fire in bursts under floating health bars; explosions chain.
-- A **five-star wanted system**: witnessed crimes raise the heat, cruisers pursue with target prediction, **roadblocks** land at four stars, the police helicopter's spotlight stops stars decaying while it watches — get pinned and you're **BUSTED**, drop and you're **WASTED** at Heatwave General. Both cost cash.
-- **Sixteen sequential story jobs** with dialogue, day banners, world marker pillars, timers, a tailing job with a spook meter, checkpoint races on land and water, holdout waves, a convoy ambush and a five-star finale — with fail states, retries, cash rewards, weapon unlocks and progress saved in `localStorage`.
-- **Repeatable side work** once the story lets you breathe: three street races with par bonuses, taxi fares (sit in any cab), package runs out of Rosa's shop, three gang hideout clearouts, and **twenty cash briefcases** hidden across both islands and the cay.
-- A full HUD: canvas minimap (peninsula, causeway, both islands, police in blue, enemies in red, side work in cyan, the job in gold), wanted stars, cash, health and armor bars, weapon readout, speedometer, dialogue box, objective banner, day banners, bust meter, damage vignette — and a **procedural car radio** with four synthesized stations.
-- Synthesized audio only — engine, boat and rotor loops, two-tone sirens, per-weapon gunfire, horns, crashes, explosions and an ambient pad, all WebAudio. No audio files.
-- Built for speed: merged-geometry buildings in a handful of draw calls, instanced palms, lamps and traffic-light heads, pooled particles and tracers, capped entity counts — it stays smooth on modest hardware.
+- **A bigger world.** The peninsula grows to **14×14 blocks** and gains a whole new landmass: **Gullwing Field**, an airport island with a 170-metre runway, terminal, tower, hangars and a parked jet, joined by its own causeway. New landmarks everywhere: the Meridian Mall's glass drum, Coral Stadium, a police HQ with a gated yard, a gas station whose pumps are exactly as flammable as you hope, plus the marina, hospital, lighthouse and casino from before — all rebuilt.
+- **Twenty jobs, five days, real branches.** Three missions offer two ways through — the casino heist's entry choice changes the guard roster and the heat; sparing or smoking Pierce changes his fate, the finale's difficulty and its dialogue; consequences are referenced in later intros and in the phone messages that land between jobs. Set pieces: a planning-then-execute heist, a convoy ambush, a yacht infiltration (sail up, board at the stern ladder, fight on deck, escape past the marine unit), a jailbreak chase, and a three-stage finale — limo chase, terminal shootout, jet escape — capped by an outro, after a proper intro sweep opens the game.
+- **Nine car types.** The fleet gains a **supercar** (the Veyra) and an **armoured SUV**, joining sedan, taxi, sports coupe, pickup (with a visible cargo bed and a lowrider bounce on the handbrake), box truck, motorcycle and the police cruiser. All cars take **damage states** — grey smoke, black smoke, open flame, burnt wreck — run **nitro** with exhaust flames and an FOV kick, shred their tyres on spike strips, and feed the engine synth a real gearbox RPM.
+- **Seven weapons.** Fists, pistol, SMG, shotgun and carbine gain an **RPG** (arcing rocket, proximity detonation, shockwave ring, hit-stop) and **grenades** (lobbed, one bounce, timed fuse). Tracers, shell casings, hit markers — gold for crits, red for kills — headshot bonuses, enemy flinch and stagger, cover-seeking and flanking AI, ragdoll-lite deaths, and glowing pickup rings for every weapon.
+- **Police who escalate properly.** Pursuit with prediction, roadblocks at four stars, **spike strips** thrown across your line, **PIT manoeuvres** that walk your tail out, five-star checkpoints with spikes in the gap, a searchlight helicopter from three stars — and the **marine unit**: take to the water at two stars and pursuit boats launch and ram. Pedestrians flee, cower, and **film crimes on their phones** — film long enough and they call it in. Traffic swerves out of your way and carjacked drivers bail and run.
+- **Weather and wet streets.** A rain system rolls in on its own schedule (and is pinned for the Blackout job): a following rain cloud, soaked dark asphalt, and rain hiss on the audio bus.
+- **Systems with somewhere to spend money.** A **garage** at Rosa's stores up to three owned cars (repair $120, store and retrieve free); the Gull Island **safehouse** has an enterable interior with a locker (ammo packs, body armor) and a healing bed; **bribes** buy a star away for $300 when the heat is off your bumper. Lifetime **stats** (kills, distance, earnings), ten **achievements**, a bigger pause-menu map, and a six-station procedural radio.
+- **Feel.** Screen shake scaled by event, hit-stop micro-freezes on explosions, brief slow-motion when the heat rises or Dex nearly dies, explosion shockwave rings, sparks, debris, water splashes — all pooled, all cheap.
+
+## The city
+
+- A **14×14-block peninsula**: downtown towers, the Neon Mile, portside sheds and cranes, marina resorts, the beachfront and boardwalk, the heights, Palms Park, the mall and stadium districts.
+- **Gull Island** by causeway (resort, safehouse with an enterable interior, dock), **Pelican Cay** across the bay, **Gullwing Field** airport island by its own causeway — and the *Meridian Star* yacht at anchor off the east shore, fully boardable.
+- **Nine car types** plus a **helicopter** (roofs are floors — land on them) and **driveable boats**, including police pursuit boats.
+- **Seven weapons** — fists, pistol, SMG, shotgun, carbine, RPG, grenades — with pickups, tracers, casings, crits and chained explosions. Destructible **crates, barriers and gas pumps** share the streets.
+- **Police, 1–5 stars**: prediction pursuit, PIT attempts, spike strips, roadblocks and checkpoints, a searchlight helicopter, marine pursuit, busts when you're pinned.
+- **Side work** between jobs: four street races (including a runway run), taxi fares with passengers, package runs, three gang hideouts, twenty cash briefcases — and a dynamic **armoured-truck event** that rolls through a quiet city.
+- A full **day-night cycle**, a six-station procedural **radio**, rain, a **minimap** and a big pause map, and progress saved to localStorage.
+
+## The twenty jobs
+
+1. **First Wheels** — steal the Zephyr GT · 2. **Hot Boxes** — hot freight to the Hotel Azure · 3. **Shadow Run** — tail Pierce (unlocks the SMG) · 4. **Pier Pressure** — the pier count room · 5. **Neon Grand Prix** — win the Mile's race · 6. **Meridian Heat** — hold the bank plaza (shotgun) · 7. **Sky Ledger** — fly for the second ledger · 8. **Convoy Funeral** — three trucks, none arrive · 9. **Bay Runner** — a package by water · 10. **Yacht Club** — board the *Meridian Star* · 11. **Decoy** — be the parade (carbine) · 12. **Crane's Vault** — the heist, your entry, your heat (grenades) · 13. **Blackout** — three substations in the rain · 14. **Regatta Run** — crash the yacht club's race · 15. **Spring Break** — stop Marco's prison transport · 16. **The Offer** — spare Pierce, or don't · 17. **Armored Might** — crack the cash truck (RPG) · 18. **The Crane Falls** — the last stand · 19. **Five-Star Goodbye** — outrun the whole city · 20. **Coronation** — limo, terminal, jet.
 
 ## Controls
 
-| Input | Action |
-| --- | --- |
-| WASD / arrows | Move on foot, drive, fly, sail |
-| Shift | Sprint (in the helicopter: descend) |
-| Space | Handbrake (in the helicopter: climb) |
-| Mouse drag | Orbit the camera |
-| E | Enter / exit a car, board the helicopter, take a boat (carjack if it's occupied) |
-| F or click | Fire the selected weapon (hold for full-auto) |
-| Q / mouse wheel / 1–5 | Weapon wheel |
-| R | Car radio — cycle four stations (in a car) |
-| Enter | Take Sable's next job / retry a failed job |
-| P / Esc | Pause |
-| M | Mute |
+- **WASD / arrows** — move, drive, fly, sail · **Shift** — sprint / **nitro in a car** (helicopter: descend) · **Space** — handbrake (helicopter: climb)
+- **E** — enter/exit car, helicopter or boat; safehouse door, locker and bed; take a stored car from Rosa's garage
+- **F / click** — fire · **Q / wheel / 1–7** — weapon wheel · **B** — bribe ($300 a star) · **C** — at Rosa's, repair ($120) or store your car
+- **R** — radio (in a car) · **Enter** — next job / retry · **P** — pause & map · **M** — mute · drag the mouse to orbit the camera
 
-## Run it
+## Running it
 
-```sh
-node serve.ts
-# then open http://localhost:8080
+```
+node serve.ts        # serves game/ on http://localhost:8080
 ```
 
-No install, no build. `game/` is the whole game; `main.ts` is the hand-in program that assembles the scored bundle and dossier.
+No build step: `game/index.html` loads the vendored three.js and the ES modules in `game/src/` directly. Everything visual is procedural — canvas textures, merged geometry, instancing, pooled particles — so the city stays light on draw calls and holds smooth frame pacing on modest hardware, headless SwiftShader included.
 
 ## Layout
 
-- `game/index.html` — page, HUD and screens
-- `game/src/` — the game in plain ES modules: `main.js` (glue, input, camera, loop), `city.js` (the world), `vehicles.js` (cars, helicopter, boats), `traffic.js`, `pedestrians.js`, `police.js`, `combat.js` (weapons, enemies, pickups), `missions.js` (the sixteen jobs + side work), `player.js`, `hud.js`, `audio.js`, `save.js`, `config.js`, `textures.js`, `shots.js` (screenshot staging)
+- `game/src/` — the game: `main.js` (glue, input, camera, loop, garage/safehouse/achievements), `city.js` (world building, day cycle, weather, destructible props), `vehicles.js` (nine cars, helicopter, boats, the yacht), `player.js`, `missions.js` (the 20 jobs, side work, dynamic events), `combat.js` (seven weapons, projectiles, explosions), `police.js` (pursuit, spikes, PIT, marine unit), `traffic.js`, `pedestrians.js` (flee, cower, film, call), `hud.js` (HUD, phone, hit markers, maps), `audio.js` (six-station radio, RPM engine, rain), `textures.js`, `config.js`, `save.js`, `shots.js` (screenshot staging)
 - `game/vendor/three.min.js` — three.js r128, vendored
 - `screenshots/` — four staged scenes (`game/src/shots.js` composes them from the real game state via `?shot=` URLs)
 - `main.ts`, `serve.ts`, `vendor/makefun-game.ts` — hand-in program, dev server, dossier library

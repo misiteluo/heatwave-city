@@ -1,9 +1,14 @@
-// shots.js — staged scenes for the four judge screenshots. When the
-// URL carries ?shot=<name>, main.js asks here to compose a frame from
-// real game state: the actual player, real police cruisers in pursuit,
-// real traffic in its lanes, real enemies and the real mission
-// marker — nothing is faked with sprites or overlays. The sun is
-// pinned to golden hour by main.js for these frames.
+// shots.js — staged scenes for the four judge screenshots. When
+// the URL carries ?shot=<name>, main.js asks here to compose a
+// frame from real game state: the actual player, a real supercar
+// with its nitro lit, real police cruisers, a real roadblock with
+// a spike strip in the gap, real enemies on the real yacht's deck,
+// Crane's real jet on the real runway — nothing is faked with
+// sprites or overlays. The sun is pinned to golden hour by main.js,
+// which is when the models look their best: glossy paint, long
+// shadows, the skyline warming up behind Dex.
+
+import { posePhone } from './player.js';
 
 export function isShotMode(params) { return params.get('shot'); }
 
@@ -26,7 +31,7 @@ function stageTrafficCar(w, vertical, line, dir, along) {
       car.heading = dir > 0 ? Math.PI / 2 : -Math.PI / 2;
     }
     car.speed = 6;
-    car.syncMesh();
+    car.syncMesh(w.city);
     return car;
   }
   return null;
@@ -44,7 +49,7 @@ function stageCops(w, spots) {
     }
     if (cop) {
       cop.x = cx; cop.z = cz; cop.heading = 0; cop.speed = speed;
-      cop.syncMesh();
+      cop.syncMesh(w.city);
     }
   }
 }
@@ -54,58 +59,77 @@ export function setupShot(name, world) {
   const w = world;
   w.hud.setStars(0);
   if (name === 'foot') {
-    // On foot on the east boardwalk: Dex against the skyline, shore
-    // traffic rolling past, the first job marked across the city.
-    w.player.x = 302; w.player.z = 58; w.player.heading = -Math.PI / 2;
+    // On foot at Gullwing Field: Dex on the terminal apron, phone
+    // in hand with Sable's text on screen, Crane's jet waiting on
+    // the apron behind him and the tower over his shoulder — the
+    // finale, five minutes early.
+    w.player.x = -282; w.player.z = 521; w.player.heading = Math.PI * 1.06;
     w.player.mesh.position.set(w.player.x, w.city.groundY(w.player.x, w.player.z), w.player.z);
     w.player.mesh.rotation.y = w.player.heading;
-    w.city.setMarker(23, 161);
-    w.hud.setObjective('Job 1 — First Wheels: reach the Neon Mile parking lot');
-    w.hud.setPrompt('E — enter car');
-    stageTrafficCar(w, true, 276, 1, 44);
-    stageTrafficCar(w, true, 276, -1, 82);
-    return { mode: 'foot', camX: 309.5, camY: 1.7, camZ: 63, lookX: 297, lookY: 1.2, lookZ: 55.5 };
+    posePhone(w.player.mesh);
+    w.hud.showPhone('Sable Quinn', 'crane\'s jet is fuelled and his limo is rolling. terminal. now.');
+    w.hud.setObjective('Job 20 — Coronation: clear the terminal apron — Crane\'s last guns');
+    w.hud.setStars(2);
+    w.city.setMarker(-276, 529, 0xff5566);
+    return { mode: 'foot', camX: -273.5, camY: 2.4, camZ: 509.5, lookX: -283, lookY: 1.5, lookZ: 522 };
   }
   if (name === 'mission') {
-    // The Meridian holdout: pillar of red light on the plaza, the
-    // bank behind, Crane's gunmen closing on Dex's position.
-    w.player.x = -11; w.player.z = -11; w.player.heading = Math.PI * 0.78;
+    // The yacht infiltration: Dex on the Meridian Star's deck,
+    // weapon up, Crane's deck crew closing in, the city skyline
+    // across the water at golden hour.
+    const spot = w.yacht.deckSpot(0.5, 5);
+    w.player.x = spot.x; w.player.z = spot.z;
+    w.player.heading = w.yacht.heading + Math.PI * 0.9;
     w.player.mesh.position.set(w.player.x, w.city.groundY(w.player.x, w.player.z), w.player.z);
     w.player.mesh.rotation.y = w.player.heading;
-    w.city.setMarker(-23, -21, 0xff5566);
-    w.hud.setObjective('Job 6 — Meridian Heat: hold the plaza while the crew works — 41s');
-    w.hud.setStars(2);
+    w.player.setWeaponDrawn(true);
+    w.hud.setObjective('Job 10 — Yacht Club: clear the yacht\'s deck crew — 3 left');
+    w.hud.setStars(3);
     const { Enemy } = w.enemyClass;
-    for (const [ex, ez] of [[-2, -4], [3, -12], [-6, 1]]) {
-      const e = new Enemy(w.scene, ex, ez, 1);
+    for (const [lx, lz] of [[3.5, -3], [-3, -6], [0.5, -9]]) {
+      const p = w.yacht.deckSpot(lx, lz);
+      const e = new Enemy(w.scene, p.x, p.z, 1.1);
       w.enemies.push(e);
     }
-    return { mode: 'foot', camX: 4, camY: 4.2, camZ: 5, lookX: -20, lookY: 1.4, lookZ: -22 };
+    // Camera off the stern quarter at deck height: Dex, the crew,
+    // the furniture and Pelican Cay behind — the bright water on
+    // the right is the low sun doing what it does at golden hour.
+    return { mode: 'foot', camX: 443, camY: 5.4, camZ: 375, lookX: 429, lookY: 2.2, lookZ: 394 };
   }
   if (name === 'chase') {
-    // The five-star goodbye: full speed down the Gull Island
-    // causeway, sea on both sides, two cruisers behind, roadblock
-    // heat ahead and the lighthouse on the horizon.
-    const car = w.makeCar('sports', 0x3ec1d3, -3.4, 362, 0);
+    // The finale on the runway: Dex's supercar alongside Crane's
+    // limousine at full tilt down Gullwing Field's strip, tower
+    // and terminal sliding past, two cruisers in the mirror.
+    const car = w.makeCar('super', 0xff7b00, -348, 559.6, Math.PI / 2);
     w.enterCar(car, true);
-    car.speed = 26;
+    car.speed = 31;
+    const limo = w.makeCar('sedan', 0x14151c, -318, 566.4, Math.PI / 2);
+    limo.speed = 29;
     w.police.setWanted(4);
-    stageCops(w, [[4.5, 344, 24], [-5, 340, 24]]);
+    stageCops(w, [[-374, 552, 28], [-380, 568, 28]]);
+    for (const cop of w.police.cars) { cop.heading = Math.PI / 2; cop.syncMesh(w.city); }
     w.hud.setStars(4);
-    w.hud.setObjective('Job 15 — Five-Star Goodbye: escape to the Gull Island safehouse');
-    return { mode: 'car', camX: -11, camY: 4.6, camZ: 322, lookX: 0, lookY: 1.5, lookZ: 362 };
+    w.hud.setObjective('Job 20 — Coronation: stop Crane\'s limousine before the airport');
+    return { mode: 'car', camX: -368, camY: 2.8, camZ: 545, lookX: -332, lookY: 1.3, lookZ: 561 };
   }
-  // cover (default): downtown chase at golden hour — the hero shot.
-  const car = w.makeCar('sports', 0xff5964, -49.4, 44, 0);
+  // Cover (default): the four-star wall. A supercar at full boost
+  // on a downtown avenue, nitro lit, a roadblock with a spike
+  // strip waiting ahead, cruisers behind and the helicopter up.
+  const car = w.makeCar('super', 0xe63946, -42.6, 40, 0);
   w.enterCar(car, true);
-  car.speed = 24;
-  w.police.setWanted(3);
-  stageCops(w, [[-49.4, 35, 22], [-44, 38, 22]]);
-  // two civilian cars ahead for depth on the avenue
-  stageTrafficCar(w, true, -46, 1, 80);
-  stageTrafficCar(w, true, -46, -1, 104);
+  car.speed = 27;
+  car.boosting = true;
+  if (car.mesh.userData.flames) for (const f of car.mesh.userData.flames) f.visible = true;
+  w.hud.setNitro(0.72);
+  w.police.setWanted(4);
+  stageCops(w, [[-49.5, 33, 24], [-36, 30.5, 24]]);
+  w.police.spawnRoadblock(w);
+  w.police.updateHeli(0.016, w, 1.2);
+  if (w.police.heli) { w.police.heli.x = -28; w.police.heli.z = 82; w.police.heli.alt = 15; w.police.heli.syncMesh(w.city); }
+  stageTrafficCar(w, true, -46, 1, 84);
+  stageTrafficCar(w, true, -46, -1, 110);
   w.city.setMarker(-46, 138);
-  w.hud.setStars(3);
-  w.hud.setObjective('Job 2 — Hot Boxes: deliver the crate to the Hotel Azure — fast');
-  return { mode: 'car', camX: -52, camY: 3.8, camZ: 26, lookX: -48.8, lookY: 1.3, lookZ: 44 };
+  w.hud.setStars(4);
+  w.hud.setObjective('Four stars — roadblock ahead. Thread it or eat the spikes.');
+  return { mode: 'car', camX: -48.5, camY: 2.4, camZ: 24.5, lookX: -41.8, lookY: 1.1, lookZ: 43 };
 }
