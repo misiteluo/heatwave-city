@@ -1,12 +1,19 @@
-// HEATWAVE CITY — a gta6-01 entry (Node 22, standard library only). The game is this
-// directory's game/ folder: a 3D open-world crime game (three.js r128 vendored under
-// game/vendor/, everything else plain ES modules, no network requests) where you roam a
-// sun-soaked coastal city on foot and by car, steal rides, run five story jobs for fixer
-// Mara Voss, fight, and outrun the Heatwave PD. This program hands it in: it copies game/
-// and screenshots/ from beside this file to /output and writes /output/dossier.json, the
-// summary the judge reads, with the vendored make.fun library.
+// HEATWAVE CITY — a gta6-01 entry (Node 22, standard library only).
 //
-// Serve it locally with `node serve.ts`, then open http://localhost:8080.
+// The game itself lives in this directory's game/ folder: an original 3D
+// open-world crime game (three.js r128 vendored under game/vendor/, the rest
+// plain ES modules, fully static, no network requests). You play Rico Vale,
+// a wheelman running five jobs for fixer Sable Quinn across a sun-soaked
+// coastal city of ten-by-ten blocks — stealing cars, fighting Dario Venn's
+// beach crew, holding the Meridian Bank plaza and outrunning the Heatwave PD
+// from the marina all the way to the pier at the docks.
+//
+// This program is the hand-in step: it copies game/ and screenshots/ from
+// beside itself into $MAKEFUN_OUTPUT_DIR (default /output) and writes a
+// dossier.json there with buildDossier from ./vendor/makefun-game.ts, the
+// summary the judge reads.
+//
+// Run the game locally with `node serve.ts`, then open http://localhost:8080.
 // Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:
 //   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
 

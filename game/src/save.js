@@ -1,34 +1,33 @@
-// HEATWAVE CITY — save data in localStorage: cash, story progress, pistol.
-// Kept tiny and forgiving: a corrupt or missing save just means a fresh game.
+// save.js — progress in localStorage: cash, story progress and lifetime
+// stats. Deliberately tiny and defensive: a corrupt save falls back to a
+// fresh game instead of breaking the title screen.
 
-const KEY = 'heatwave-city-save-v1';
+import { SAVE_KEY } from './config.js';
+
+export function defaultSave() {
+  return { cash: 120, mission: 0, completed: 0, busts: 0, wasted: 0, started: false };
+}
 
 export function loadSave() {
   try {
-    const raw = localStorage.getItem(KEY);
-    if (!raw) return null;
-    const d = JSON.parse(raw);
-    if (typeof d !== 'object' || d === null) return null;
-    return {
-      cash: Math.max(0, d.cash | 0),
-      mission: Math.max(0, Math.min(5, d.mission | 0)),
-      pistol: !!d.pistol,
-      done: !!d.done,
-    };
-  } catch { return null; }
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) return defaultSave();
+    const data = JSON.parse(raw);
+    const base = defaultSave();
+    for (const k of Object.keys(base)) {
+      if (typeof data[k] === typeof base[k]) base[k] = data[k];
+    }
+    return base;
+  } catch (e) {
+    return defaultSave();
+  }
 }
 
-export function storeSave(state) {
-  try {
-    localStorage.setItem(KEY, JSON.stringify({
-      cash: state.cash | 0,
-      mission: state.missionIndex | 0,
-      pistol: !!state.pistol,
-      done: !!state.storyDone,
-    }));
-  } catch { /* private mode etc. — the game still runs */ }
+export function storeSave(save) {
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) { /* private mode */ }
 }
 
-export function clearSave() {
-  try { localStorage.removeItem(KEY); } catch { /* ignore */ }
+export function wipeSave() {
+  try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* ignore */ }
+  return defaultSave();
 }

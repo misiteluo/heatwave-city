@@ -1,46 +1,104 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Heatwave City</title>
+<title>HEATWAVE CITY — a sunny open-world crime game</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌴</text></svg>">
 <style>
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #0e2231; font-family: system-ui, "Segoe UI", sans-serif; }
-  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
-  #ui { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
-  #ui .overlay { pointer-events: auto; }
-  .minimap { position: absolute; top: 14px; left: 14px; width: 190px; height: 190px; border-radius: 10px; border: 2px solid rgba(255,255,255,.55); box-shadow: 0 4px 18px rgba(0,0,0,.4); display: none; }
-  .banner { position: absolute; top: 16px; left: 50%; transform: translateX(-50%); max-width: 62%; padding: 9px 22px; border-radius: 999px; background: rgba(10,26,38,.72); color: #ffd873; font-weight: 700; font-size: 17px; letter-spacing: .02em; text-align: center; display: none; box-shadow: 0 4px 14px rgba(0,0,0,.35); }
-  .stars { position: absolute; top: 12px; right: 18px; font-size: 30px; display: none; text-shadow: 0 2px 6px rgba(0,0,0,.5); }
-  .star { color: rgba(255,255,255,.28); margin-left: 2px; }
-  .star.on { color: #ffc93c; }
-  .stats { position: absolute; left: 16px; bottom: 16px; display: none; color: #fff; text-shadow: 0 2px 5px rgba(0,0,0,.6); }
-  .cash { font-size: 26px; font-weight: 800; color: #7dff8a; }
-  .hpwrap { width: 190px; height: 13px; margin-top: 5px; border-radius: 7px; background: rgba(0,0,0,.55); border: 1px solid rgba(255,255,255,.4); overflow: hidden; }
-  .hpbar { height: 100%; width: 100%; background: #51e05e; transition: width .15s; }
-  .ammo { margin-top: 5px; font-size: 14px; font-weight: 700; letter-spacing: .06em; color: #ffe9a8; }
-  .speed { position: absolute; right: 20px; bottom: 18px; font-size: 30px; font-weight: 800; color: #fff; text-shadow: 0 2px 8px rgba(0,0,0,.65); display: none; }
-  .prompt { position: absolute; left: 50%; bottom: 15%; transform: translateX(-50%); padding: 8px 18px; border-radius: 8px; background: rgba(10,26,38,.78); color: #fff; font-size: 16px; font-weight: 600; display: none; }
-  .toast { position: absolute; left: 50%; top: 22%; transform: translateX(-50%); max-width: 70%; padding: 10px 20px; border-radius: 10px; background: rgba(10,26,38,.82); color: #fff; font-size: 17px; font-weight: 600; text-align: center; opacity: 0; transition: opacity .3s; }
-  .crosshair { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); color: rgba(255,255,255,.85); font-size: 20px; font-weight: 300; display: none; text-shadow: 0 1px 3px rgba(0,0,0,.7); }
-  .vignette { position: absolute; inset: 0; background: radial-gradient(ellipse at center, transparent 52%, rgba(200,20,10,.55) 100%); opacity: 0; }
-  .overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: linear-gradient(180deg, rgba(8,24,38,.25), rgba(8,24,38,.68)); color: #fff; text-align: center; padding: 20px; }
-  .overlay.small { background: rgba(8,20,32,.55); }
-  .gametitle { font-size: 64px; font-weight: 900; letter-spacing: .04em; color: #ffc93c; text-shadow: 0 4px 0 #d95f4b, 0 10px 28px rgba(0,0,0,.55); }
-  .tagline { font-size: 20px; font-weight: 600; color: #dff3ff; margin-top: 2px; text-shadow: 0 2px 6px rgba(0,0,0,.6); }
-  .story { max-width: 560px; font-size: 16px; line-height: 1.5; color: #eef7ff; text-shadow: 0 1px 4px rgba(0,0,0,.7); }
-  .overtitle { font-size: 52px; font-weight: 900; letter-spacing: .06em; text-shadow: 0 6px 22px rgba(0,0,0,.6); }
-  .btnrow { display: flex; gap: 14px; margin: 18px 0 8px; }
-  .btn { pointer-events: auto; font-size: 18px; font-weight: 800; padding: 12px 30px; border: none; border-radius: 999px; background: #ffc93c; color: #40260a; cursor: pointer; box-shadow: 0 5px 16px rgba(0,0,0,.4); }
-  .btn:hover { background: #ffd873; }
-  .btn:disabled { background: #8d97a3; color: #e5ebf0; cursor: default; }
-  .controls { margin-top: 14px; font-size: 13px; color: rgba(255,255,255,.85); max-width: 640px; line-height: 1.6; text-shadow: 0 1px 3px rgba(0,0,0,.8); }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { width:100%; height:100%; overflow:hidden; background:#1b1208; font-family:'Segoe UI',system-ui,sans-serif; }
+  #game { position:fixed; inset:0; }
+  canvas.webgl { display:block; }
+  .panel { background:rgba(12,14,20,.72); color:#fff; border-radius:10px; padding:8px 12px; }
+  #minimap { position:fixed; left:14px; top:14px; width:168px; height:168px; border-radius:12px;
+    border:2px solid rgba(255,255,255,.55); box-shadow:0 4px 18px rgba(0,0,0,.45); background:#20242c; z-index:5; }
+  #stars { position:fixed; right:18px; top:12px; font-size:30px; letter-spacing:3px; color:#ffd23f;
+    text-shadow:0 2px 8px rgba(0,0,0,.8); z-index:5; }
+  #cashbox { position:fixed; left:14px; bottom:16px; z-index:5; min-width:190px; }
+  #cash { font-size:24px; font-weight:700; color:#7bf1a8; }
+  #healthbar { height:12px; background:rgba(255,255,255,.18); border-radius:6px; margin-top:6px; overflow:hidden; }
+  #healthfill { height:100%; width:100%; background:#06d6a0; transition:width .15s; }
+  #ammo { margin-top:5px; font-size:15px; color:#ffe9a3; }
+  #speed { position:fixed; right:22px; bottom:20px; font-size:32px; font-weight:800; color:#fff;
+    text-shadow:0 2px 10px rgba(0,0,0,.85); z-index:5; display:none; }
+  #objective { position:fixed; top:14px; left:50%; transform:translateX(-50%); max-width:62%; z-index:5;
+    text-align:center; font-size:16px; line-height:1.35; display:none; border:1px solid rgba(255,210,63,.5); }
+  #objectivetext { color:#ffe9a3; }
+  #prompt { position:fixed; bottom:110px; left:50%; transform:translateX(-50%); z-index:5; display:none;
+    font-size:17px; font-weight:600; }
+  #toast { position:fixed; bottom:170px; left:50%; transform:translateX(-50%); z-index:6; font-size:19px;
+    font-weight:700; color:#ffd23f; text-shadow:0 2px 8px #000; opacity:0; transition:opacity .3s; pointer-events:none; }
+  #bustwrap { position:fixed; bottom:210px; left:50%; transform:translateX(-50%); width:240px; z-index:6; display:none;
+    text-align:center; color:#ff8fa3; font-weight:700; }
+  #bustbar { height:10px; background:rgba(255,255,255,.2); border-radius:5px; overflow:hidden; margin-top:4px; }
+  #bustfill { height:100%; width:0%; background:#e63946; }
+  #vignette { position:fixed; inset:0; pointer-events:none; z-index:4; opacity:0; transition:opacity .12s;
+    background:radial-gradient(ellipse at center, transparent 52%, rgba(200,0,0,.55) 100%); }
+  .screen { position:fixed; inset:0; z-index:10; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    background:linear-gradient(160deg, rgba(255,122,24,.88), rgba(214,40,57,.88) 55%, rgba(27,18,60,.94));
+    color:#fff; text-align:center; padding:24px; }
+  .screen h1 { font-size:64px; letter-spacing:4px; text-shadow:0 4px 0 #b3001b, 0 10px 28px rgba(0,0,0,.5); }
+  .screen h2 { font-size:44px; letter-spacing:3px; }
+  .screen p { max-width:560px; margin:14px 0; font-size:17px; line-height:1.5; }
+  .btn { pointer-events:auto; cursor:pointer; border:none; border-radius:10px; padding:13px 34px; margin:6px;
+    font-size:19px; font-weight:700; background:#ffd23f; color:#3a2200; box-shadow:0 4px 0 #b8860b; }
+  .btn:hover { background:#ffe066; }
+  .btn.secondary { background:#fff; color:#333; box-shadow:0 4px 0 #999; }
+  .controls { margin-top:16px; font-size:14px; line-height:1.9; color:#ffe9c9; }
+  .hidden { display:none !important; }
 </style>
 </head>
 <body>
-<canvas id="game" aria-label="Heatwave City: a 3D open-world crime game"></canvas>
-<div id="ui"></div>
-<script src="./vendor/three.min.js"></script>
-<script type="module" src="./src/main.js"></script>
+<div id="game"></div>
+<canvas id="minimap" width="168" height="168"></canvas>
+<div id="stars">☆☆☆☆☆</div>
+<div id="objective" class="panel"><span id="objectivetext"></span></div>
+<div id="cashbox" class="panel">
+  <div id="cash">$120</div>
+  <div id="healthbar"><div id="healthfill"></div></div>
+  <div id="ammo">🔫 24</div>
+</div>
+<div id="speed">0 km/h</div>
+<div id="prompt" class="panel"></div>
+<div id="toast"></div>
+<div id="bustwrap">BUSTED IN…<div id="bustbar"><div id="bustfill"></div></div></div>
+<div id="vignette"></div>
+
+<div id="title" class="screen">
+  <h1>HEATWAVE CITY</h1>
+  <p>Rico Vale rolled into Heatwave City with one phone number in his pocket: Sable Quinn,
+     a fixer who pays cash for fast driving and faster decisions. Steal rides, run her five jobs,
+     and stay one siren ahead of the Heatwave PD.</p>
+  <div>
+    <button class="btn" id="newgame">New Game</button>
+    <button class="btn secondary" id="continue">Continue</button>
+  </div>
+  <div class="controls">
+    WASD move / drive &nbsp;·&nbsp; Shift sprint &nbsp;·&nbsp; E enter / exit car &nbsp;·&nbsp; Space handbrake<br>
+    F or Click punch / shoot &nbsp;·&nbsp; Drag mouse orbit camera &nbsp;·&nbsp; Enter next job &nbsp;·&nbsp; P pause &nbsp;·&nbsp; M mute
+  </div>
+</div>
+
+<div id="pause" class="screen hidden" style="background:rgba(10,10,24,.82)">
+  <h2>PAUSED</h2>
+  <p id="pausestats"></p>
+  <button class="btn" id="resume">Resume</button>
+</div>
+
+<div id="busted" class="screen hidden" style="background:linear-gradient(160deg, rgba(30,60,140,.92), rgba(10,10,30,.95))">
+  <h2>BUSTED</h2>
+  <p id="bustedtext">The Heatwave PD boxed Rico in.</p>
+  <button class="btn" id="bustedbtn">Pay the fine &amp; walk</button>
+</div>
+
+<div id="wasted" class="screen hidden" style="background:linear-gradient(160deg, rgba(120,10,20,.92), rgba(15,5,5,.96))">
+  <h2>WASTED</h2>
+  <p id="wastedtext">Rico wakes up at Heatwave General, lighter in the wallet.</p>
+  <button class="btn" id="wastedbtn">Leave hospital</button>
+</div>
+
+<script src="vendor/three.min.js"></script>
+<script type="module" src="src/main.js"></script>
 </body>
 </html>
