@@ -6,30 +6,31 @@
 
 An original 3D open-world crime game that runs entirely in the browser — no build step, no network requests, just static files and a vendored copy of three.js.
 
-You are **Rico Vale**, a wheelman who just rolled into a sun-soaked coastal city with one phone number in his pocket: **Sable Quinn**, a fixer who pays cash for fast driving and faster decisions. Work through her five-job story — steal a marked coupe for the Coral Garage, run a hot parcel under a two-star pursuit, collect a beach debt from Dario Venn and his crew, survive a four-star run to the lighthouse safehouse, and hold the Meridian Bank plaza while a vault crew works, then vanish to the docks.
+You are **Nico Serrano**, a driver with a burnt licence and one phone number: **Valentina "Val" Rojas**, a fixer who pays cash for fast driving and faster decisions. Across **nine story jobs** you steal a gold Comet GT for Priya Nair's chop shop, run hot freight under a two-star pursuit, tail Delgado's lieutenant Silas Kane to the pier count room, clear his crew in a shootout, race the Neon Grand Prix, hold the Meridian Bank plaza while a vault crew works, fly a helicopter to Gull Island for Delgado's ledger, wreck his convoy — and then run from every star in the sky to the lighthouse safehouse.
 
 ## What's in the city
 
-- A 10×10 block city with procedurally textured towers and shopfronts (every facade is painted on a Canvas at boot), sidewalks, plazas, palm trees, streetlights, lane markings, a sandy beach and an animated sea along the south edge, all under warm directional sunlight with soft shadows and haze.
-- On-foot third-person play: a blocky animated character, sprinting, a drag-orbit camera, punching and a hitscan pistol with tracers, muzzle flash, limited ammo and glowing ammo pickups.
-- Arcade driving with parked and moving cars you can simply take — or carjack, driver and all, if you're willing to be seen doing it. Traffic follows lanes, brakes for obstacles and honks; cars smoke as they take damage and die when wrecked.
-- Pedestrians who stroll the sidewalks and scatter from gunfire, reckless driving and flying fists.
-- A five-star wanted system: crimes witnessed by police or bystanders raise the heat, cruisers spawn at the city edges and pursue, roadblocks appear at four stars, stars decay when you stay out of sight — and if a cruiser sits beside you on foot for three seconds, you're **BUSTED**. Drop to zero health and you're **WASTED**. Both cost you cash.
-- Five sequential story jobs with light-pillar world markers, a gold minimap dot, HUD objectives and cash rewards, plus progress and cash saved in `localStorage`.
-- A full HUD: canvas minimap (roads, beach, police in blue, enemies in red, mission in gold, player arrow, north marker), wanted stars, cash, health bar, ammo, speedometer, objective banner, contextual prompts, toasts and a damage vignette.
-- Synthesized audio only — engine note that follows your speed, two-tone sirens, gunshots, punches, horns, reward chimes and a slow ambient pad, all from WebAudio oscillators. No audio files.
+- A **12×12-block peninsula** with real districts — downtown towers, the Neon Mile's billboards, portside warehouse sheds with shipping containers, marina hotels, north heights, a beachfront boardwalk — plus an east bay with piers and bobbing boats, and a **causeway out to Gull Island** with its lighthouse, safehouse and helipad. Every facade is painted on a Canvas at boot; windows glow as the **full day-night cycle** turns, streetlights come on, and the lighthouse beam sweeps the dark.
+- **Six kinds of wheels**: sedans, sports coupes, pickups, box trucks, taxis and motorcycles, each with its own speed, acceleration, weight of damage and feel — plus a **flyable helicopter** on the marina pad (and a police helicopter that hunts you from three stars). Traffic holds lanes, stops at **working traffic lights**, brakes, honks and turns at intersections. Parked cars everywhere can simply be taken — or carjacked, driver and all, if you're willing to be seen.
+- On-foot third-person play with sprint, an orbit camera, and a **four-slot weapon wheel**: fists, pistol, full-auto SMG and a seven-pellet shotgun, each with its own ammo pool, pickups, tracers and sound. Enemies strafe and fire in bursts; explosions chain into cars.
+- A **five-star wanted system**: witnessed crimes raise the heat, cruisers pursue with target prediction, **roadblocks** land at four stars, the police helicopter's spotlight stops stars decaying — get pinned and you're **BUSTED**, drop and you're **WASTED** at Heatwave General. Both cost cash.
+- **Nine sequential story jobs** with voiced-style dialogue, world marker pillars, a gold minimap dot, timers, a tailing job with a spook meter, a checkpoint Grand Prix, holdout waves, a helicopter ledger run and a five-star finale — with fail states, retries, cash rewards, weapon unlocks and progress saved in `localStorage`.
+- A full HUD: canvas minimap (peninsula, causeway, island, police in blue, enemies in red, the job in gold), wanted stars, cash, health and armor bars, weapon readout, speedometer, dialogue box, objective banner, bust meter, damage vignette — and a **procedural car radio** with three synthesized stations.
+- Synthesized audio only — a two-oscillator engine, helicopter rotor wash, two-tone sirens, per-weapon gunfire, horns, crashes, explosions and an ambient pad, all WebAudio. No audio files.
 
 ## Controls
 
 | Input | Action |
 | --- | --- |
-| WASD / arrows | Move on foot, drive |
-| Shift | Sprint |
+| WASD / arrows | Move on foot, drive, fly |
+| Shift | Sprint (in the helicopter: descend) |
+| Space | Handbrake (in the helicopter: climb) |
 | Mouse drag | Orbit the camera |
-| E | Enter / exit a car (carjack if it's occupied) |
-| F or left-click | Punch, or shoot when a target is ahead |
-| Space | Handbrake |
-| Enter | Take Sable's next job |
+| E | Enter / exit a car, board the helicopter (carjack if it's occupied) |
+| F or click | Fire the selected weapon (hold for the SMG) |
+| Q / mouse wheel / 1–4 | Weapon wheel |
+| R | Car radio — cycle three stations (in a car) |
+| Enter | Take Val's next job / retry a failed job |
 | P / Esc | Pause |
 | M | Mute |
 

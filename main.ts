@@ -1,21 +1,20 @@
-// HEATWAVE CITY — a gta6-01 entry (Node 22, standard library only).
+// HEATWAVE CITY — hand-in program for the gta6-01 bounty (Node 22,
+// standard library only, no dependencies to install).
 //
-// The game itself lives in this directory's game/ folder: an original 3D
-// open-world crime game (three.js r128 vendored under game/vendor/, the rest
-// plain ES modules, fully static, no network requests). You play Rico Vale,
-// a wheelman running five jobs for fixer Sable Quinn across a sun-soaked
-// coastal city of ten-by-ten blocks — stealing cars, fighting Dario Venn's
-// beach crew, holding the Meridian Bank plaza and outrunning the Heatwave PD
-// from the marina all the way to the pier at the docks.
+// The game is the static site in game/: an original 3D open-world crime
+// game — vendored three.js r128, plain ES modules, procedural canvas
+// textures, synthesized WebAudio, zero network requests. You are Nico
+// Serrano, a driver working nine jobs for fixer Valentina "Val" Rojas
+// across a 12x12-block neon peninsula: downtown towers, portside sheds,
+// a marina, a beachfront, and a causeway out to Gull Island.
 //
-// This program is the hand-in step: it copies game/ and screenshots/ from
-// beside itself into $MAKEFUN_OUTPUT_DIR (default /output) and writes a
-// dossier.json there with buildDossier from ./vendor/makefun-game.ts, the
-// summary the judge reads.
+// This program copies game/ and screenshots/ into $MAKEFUN_OUTPUT_DIR
+// (default /output) and writes the judge's dossier.json there using
+// buildDossier from ./vendor/makefun-game.ts.
 //
-// Run the game locally with `node serve.ts`, then open http://localhost:8080.
-// Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:
-//   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
+// Play it locally with `node serve.ts`, then open http://localhost:8080.
+// Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for
+// /output:  mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
 
 import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -28,12 +27,13 @@ const out = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
 mkdirSync(out, { recursive: true });
 cpSync(join(here, 'game'), join(out, 'game'), { recursive: true });
 mkdirSync(join(out, 'screenshots'), { recursive: true });
-if (existsSync(join(here, 'screenshots'))) cpSync(join(here, 'screenshots'), join(out, 'screenshots'), { recursive: true });
+if (existsSync(join(here, 'screenshots'))) {
+  cpSync(join(here, 'screenshots'), join(out, 'screenshots'), { recursive: true });
+}
 
-// The scorer's own caps (reference/gate.json): only text_max_bytes shapes the bytes; the others refuse an entry the
-// scorer would refuse (more than 4 screenshots or one over 256 KiB; more than 993 files in game/ or 48 MiB of game
-// files, in all, or a path under game/ over 1000 bytes: game/ counts beside /output's own 1000-entry cap, its
-// screenshots/ and dossier.json).
+// Caps mirror the scorer's own gate: at most 4 screenshots of 256 KiB,
+// at most 993 game files totalling 48 MiB, no game path over 1000
+// bytes, and the dossier text budget of 160 KiB.
 writeFileSync(
   join(out, 'dossier.json'),
   buildDossier(out, {
